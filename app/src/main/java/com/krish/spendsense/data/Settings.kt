@@ -1,0 +1,122 @@
+package com.krish.spendsense.data
+
+import android.content.Context
+import androidx.datastore.preferences.core.MutablePreferences
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
+import androidx.datastore.preferences.preferencesDataStore
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
+import java.time.YearMonth
+
+data class AppSettings(
+    val dailyLimitPaise: Long = 100_000,
+    val warnPct: Int = 80,
+    val largeTxnPaise: Long = 500_000,
+    /** 0 = derive from daily limit x days in month. */
+    val monthlyBudgetPaise: Long = 0,
+    val summaryMinute: Int = 21 * 60 + 30,
+    val weeklyMinute: Int = 20 * 60,
+    val monthlyMinute: Int = 9 * 60,
+    val lastScanTs: Long = 0,
+    val onboardingDone: Boolean = false,
+    val backfillDone: Boolean = false,
+    val appLock: Boolean = true,
+    val debugCapture: Boolean = false,
+    val notifyEachTxn: Boolean = true,
+    val ownVpas: Set<String> = emptySet(),
+    val ccPayees: Set<String> = emptySet(),
+    val firedAlerts: Set<String> = emptySet(),
+    val listenerConnectedAt: Long = 0,
+    val listenerDisconnectedAt: Long = 0,
+) {
+    fun monthlyBudget(month: YearMonth): Long =
+        if (monthlyBudgetPaise > 0) monthlyBudgetPaise else dailyLimitPaise * month.lengthOfMonth()
+}
+
+private val Context.dataStore by preferencesDataStore("settings")
+
+/** DataStore (Preferences) for settings. */
+class SettingsStore(private val context: Context) {
+    private object K {
+        val dailyLimit = longPreferencesKey("daily_limit")
+        val warnPct = intPreferencesKey("warn_pct")
+        val largeTxn = longPreferencesKey("large_txn")
+        val monthlyBudget = longPreferencesKey("monthly_budget")
+        val summaryMinute = intPreferencesKey("summary_minute")
+        val weeklyMinute = intPreferencesKey("weekly_minute")
+        val monthlyMinute = intPreferencesKey("monthly_minute")
+        val lastScan = longPreferencesKey("last_scan_ts")
+        val onboardingDone = booleanPreferencesKey("onboarding_done")
+        val backfillDone = booleanPreferencesKey("backfill_done")
+        val appLock = booleanPreferencesKey("app_lock")
+        val debugCapture = booleanPreferencesKey("debug_capture")
+        val notifyEachTxn = booleanPreferencesKey("notify_each_txn")
+        val ownVpas = stringSetPreferencesKey("own_vpas")
+        val ccPayees = stringSetPreferencesKey("cc_payees")
+        val fired = stringSetPreferencesKey("fired_alerts")
+        val listenerUp = longPreferencesKey("listener_up")
+        val listenerDown = longPreferencesKey("listener_down")
+    }
+
+    private val d = AppSettings()
+
+    val flow: Flow<AppSettings> = context.dataStore.data.map { p: Preferences ->
+        AppSettings(
+            dailyLimitPaise = p[K.dailyLimit] ?: d.dailyLimitPaise,
+            warnPct = p[K.warnPct] ?: d.warnPct,
+            largeTxnPaise = p[K.largeTxn] ?: d.largeTxnPaise,
+            monthlyBudgetPaise = p[K.monthlyBudget] ?: d.monthlyBudgetPaise,
+            summaryMinute = p[K.summaryMinute] ?: d.summaryMinute,
+            weeklyMinute = p[K.weeklyMinute] ?: d.weeklyMinute,
+            monthlyMinute = p[K.monthlyMinute] ?: d.monthlyMinute,
+            lastScanTs = p[K.lastScan] ?: d.lastScanTs,
+            onboardingDone = p[K.onboardingDone] ?: d.onboardingDone,
+            backfillDone = p[K.backfillDone] ?: d.backfillDone,
+            appLock = p[K.appLock] ?: d.appLock,
+            debugCapture = p[K.debugCapture] ?: d.debugCapture,
+            notifyEachTxn = p[K.notifyEachTxn] ?: d.notifyEachTxn,
+            ownVpas = p[K.ownVpas] ?: d.ownVpas,
+            ccPayees = p[K.ccPayees] ?: d.ccPayees,
+            firedAlerts = p[K.fired] ?: d.firedAlerts,
+            listenerConnectedAt = p[K.listenerUp] ?: 0,
+            listenerDisconnectedAt = p[K.listenerDown] ?: 0,
+        )
+    }
+
+    suspend fun get(): AppSettings = flow.first()
+
+    private suspend fun set(block: (MutablePreferences) -> Unit) {
+        context.dataStore.edit { block(it) }
+    }
+
+    suspend fun setDailyLimit(paise: Long) = set { it[K.dailyLimit] = paise }
+    suspend fun setWarnPct(pct: Int) = set { it[K.warnPct] = pct.coerceIn(10, 99) }
+    suspend fun setLargeTxn(paise: Long) = set { it[K.largeTxn] = paise }
+    suspend fun setMonthlyBudget(paise: Long) = set { it[K.monthlyBudget] = paise }
+    suspend fun setSummaryMinute(m: Int) = set { it[K.summaryMinute] = m }
+    suspend fun setWeeklyMinute(m: Int) = set { it[K.weeklyMinute] = m }
+    suspend fun setMonthlyMinute(m: Int) = set { it[K.monthlyMinute] = m }
+    suspend fun setLastScan(ts: Long) = set { p -> if (ts > (p[K.lastScan] ?: 0)) p[K.lastScan] = ts }
+    suspend fun setOnboardingDone(v: Boolean) = set { it[K.onboardingDone] = v }
+    suspend fun setBackfillDone(v: Boolean) = set { it[K.backfillDone] = v }
+    suspend fun setAppLock(v: Boolean) = set { it[K.appLock] = v }
+    suspend fun setDebugCapture(v: Boolean) = set { it[K.debugCapture] = v }
+    suspend fun setNotifyEachTxn(v: Boolean) = set { it[K.notifyEachTxn] = v }
+    suspend fun setOwnVpas(v: Set<String>) = set { it[K.ownVpas] = v.map(String::lowercase).toSet() }
+    suspend fun setCcPayees(v: Set<String>) = set { it[K.ccPayees] = v }
+    suspend fun setListenerState(connected: Boolean, at: Long) =
+        set { if (connected) it[K.listenerUp] = at else it[K.listenerDown] = at }
+
+    /** Records fired alert keys; keys from earlier months are pruned. */
+    suspend fun markFired(keys: Collection<String>) = set { p ->
+        val month = YearMonth.now().toString()
+        val prev = YearMonth.now().minusMonths(1).toString()
+        p[K.fired] = ((p[K.fired] ?: emptySet()) + keys).filter { it.contains(month) || it.contains(prev) }.toSet()
+    }
+}
