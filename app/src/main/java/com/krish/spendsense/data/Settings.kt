@@ -34,6 +34,8 @@ data class AppSettings(
     val firedAlerts: Set<String> = emptySet(),
     val listenerConnectedAt: Long = 0,
     val listenerDisconnectedAt: Long = 0,
+    /** Ticked Xiaomi reliability steps (autostart, battery, recents lock). */
+    val checklist: Set<String> = emptySet(),
 ) {
     fun monthlyBudget(month: YearMonth): Long =
         if (monthlyBudgetPaise > 0) monthlyBudgetPaise else dailyLimitPaise * month.lengthOfMonth()
@@ -62,6 +64,7 @@ class SettingsStore(private val context: Context) {
         val fired = stringSetPreferencesKey("fired_alerts")
         val listenerUp = longPreferencesKey("listener_up")
         val listenerDown = longPreferencesKey("listener_down")
+        val checklist = stringSetPreferencesKey("checklist")
     }
 
     private val d = AppSettings()
@@ -86,6 +89,7 @@ class SettingsStore(private val context: Context) {
             firedAlerts = p[K.fired] ?: d.firedAlerts,
             listenerConnectedAt = p[K.listenerUp] ?: 0,
             listenerDisconnectedAt = p[K.listenerDown] ?: 0,
+            checklist = p[K.checklist] ?: emptySet(),
         )
     }
 
@@ -110,6 +114,8 @@ class SettingsStore(private val context: Context) {
     suspend fun setNotifyEachTxn(v: Boolean) = set { it[K.notifyEachTxn] = v }
     suspend fun setOwnVpas(v: Set<String>) = set { it[K.ownVpas] = v.map(String::lowercase).toSet() }
     suspend fun setCcPayees(v: Set<String>) = set { it[K.ccPayees] = v }
+    suspend fun setChecked(item: String, done: Boolean) =
+        set { p -> p[K.checklist] = (p[K.checklist] ?: emptySet()).let { if (done) it + item else it - item } }
     suspend fun setListenerState(connected: Boolean, at: Long) =
         set { if (connected) it[K.listenerUp] = at else it[K.listenerDown] = at }
 
