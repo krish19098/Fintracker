@@ -1,0 +1,9 @@
+{
+  "_comment": "Per-fixture test context that is not part of the message text: the DLT sender it arrived from and, where the user recorded it, the received time (IST). Fixtures with timeFrom=SMS_RECEIVED and no receivedAt get a test-injected time on the same date.",
+  "sms/axis_1": {"sender": "AX-AXISBK-S"},
+  "sms/cub_1": {"sender": "JK-CUBANK-S"},
+  "sms/cub_2": {"sender": "JK-CUBANK-S", "receivedAt": "2026-08-07T13:46:00+05:30"},
+  "sms/cub_3": {"sender": "JK-CUBANK-S", "receivedAt": "2026-08-07T15:12:00+05:30"},
+  "sms/cub_4": {"sender": "JK-CUBANK-S"},
+  "sms/hdfc_1": {"sender": "VM-HDFCBK-S"}
+}
