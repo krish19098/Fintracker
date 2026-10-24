@@ -6,6 +6,7 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
+    alias(libs.plugins.room)
 }
 
 val keystoreDir = rootProject.file("keystore")
@@ -71,8 +72,10 @@ android {
     }
 }
 
-ksp {
-    arg("room.schemaLocation", "$projectDir/schemas")
+// The Room plugin gives each variant its own schema output; a shared ksp schemaLocation let the
+// debug and release KSP tasks read each other's half-written schema file.
+room {
+    schemaDirectory("$projectDir/schemas")
 }
 
 // Unit tests read the shared fixtures from the repo root.
