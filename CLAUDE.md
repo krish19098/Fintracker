@@ -19,7 +19,25 @@ Rules for this build:
 4. **Ingestion.** SMS receiver, notification listener, inbox scanner (WorkManager), first-run backfill.
 5. **Domain.** Categoriser, exclusions, alerts, insights engine, each with unit tests.
 6. **UI.** Compose screens and navigation.
-7. **Final check.** Run `./gradlew test assembleDebug` and fix all warnings that indicate real bugs. Write a short README with install steps.
+7. **Final check.** If the Android SDK is available locally, run `./gradlew test assembleDebug` and fix all warnings that indicate real bugs. If it is not available (cloud session), skip the local build and rely on CI (see Build & delivery). Write a short README with install steps. Commit and push.
+
+## Build & delivery (mobile-only workflow, no PC)
+The user works only from his phone, so the APK is built by GitHub Actions and downloaded on the phone.
+
+- Add `.github/workflows/android.yml`. It triggers on push to `main` and runs on `ubuntu-latest` with:
+  - JDK 17
+  - `android-actions/setup-android`
+  - Gradle cache
+  - `./gradlew test assembleRelease`
+- **Stable signing, so updates install over the old app without wiping data:**
+  1. Generate `keystore/spendsense.jks` once with `keytool`.
+  2. Commit it to this **private** repo.
+  3. Put the store/key passwords in `keystore/keystore.properties`. Also committed; this is acceptable for a private personal repo, and the README must note it.
+  4. `release` signs with this keystore. Keep R8 minify off for v1.
+  5. Never regenerate the keystore after the first commit.
+- **Release on every build:** create a GitHub Release tagged `v1.0.<run_number>` with `app-release.apk` attached, using `softprops/action-gh-release`. This gives the user a direct APK download link he can open in the phone browser.
+- `versionCode = GITHUB_RUN_NUMBER` (default 1 locally), so every build installs as an update.
+- If you can't run the build yourself, review the Gradle files carefully for version compatibility (AGP ↔ Gradle ↔ Kotlin ↔ Compose compiler plugin ↔ Room/KSP). Pin known-compatible versions in the version catalog.
 
 Do not stop for confirmation between steps. If a decision is not covered here, pick the simplest option consistent with this file and note it in the README under "Assumptions".
 
