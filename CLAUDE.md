@@ -71,7 +71,7 @@ fixtures/      sample SMS and notification texts (redacted) + expected results
 - Read the subscription id from the intent extras (`subscription` / `android.telephony.extra.SUBSCRIPTION_INDEX`). Map it to SIM slot and carrier via `SubscriptionManager`, then store `simSlot` (1 or 2) on the transaction.
 - **Inbox scanner.** WorkManager runs every 15 minutes, plus once on every app open. It queries `content://sms/inbox` for messages after the stored `lastScannedTimestamp`, using the `sub_id` column for the SIM. This catches anything the receiver missed when HyperOS killed the app.
 - **First-run backfill.** Scan the last 180 days of the SMS inbox, so insights work from day one. Show progress in the UI.
-- **Sender filter.** DLT headers look like `XX-HDFCBK`. Match on the suffix after the hyphen, case-insensitive. Initial sender keys, to verify against the fixtures:
+- **Sender filter.** DLT headers look like `XX-HDFCBK` or the newer `XX-HDFCBK-S` / `-T` / `-P`. Strip the 2-letter prefix and any trailing `-S`/`-T`/`-P`/`-G` category suffix, then match the middle key, case-insensitive. Initial sender keys, to verify against the fixtures:
   - HDFC: `HDFCBK`, `HDFCBN`
   - Axis: `AXISBK`
   - CUB: `CUBANK`, `CUBLTD`
@@ -111,6 +111,16 @@ Raw text is deleted once the item is resolved.
 - `source: SMS | NOTIF | IMPORT`
 - `app: GPAY | PAYTM | OTHER_UPI | NON_UPI`
 - `simSlot?`
+- `counterpartyAcctLast4?` (when money goes to an account number rather than a VPA or name; used for self-transfer detection against own accounts)
+- `upiType?` (`P2M` | `P2P` | `P2A`, when the SMS states it)
+
+Date and time rules:
+- If the SMS has both date and time, use them, in IST.
+- If it has only a date, combine it with the SMS received time when the received date matches. Otherwise use that date at 12:00 IST.
+- Accept these date formats: `dd-MM-yy`, `dd-MM-yyyy`, `dd/MM/yy`, `dd/MM/yyyy`, `dd-MMM-yy`.
+- **RRN date check (soft):** a 12-digit UPI RRN usually starts with the last digit of the year followed by the 3-digit day-of-year. For example, `626017540942` → 2026, day 260 → 17 Sep.
+  - Use this to fill in the date if it's missing.
+  - If it disagrees with the parsed date, log it in debug builds only. Never reject or flag the transaction over it, because not all banks follow the pattern.
 
 Parsing rules:
 - Use one parser per bank or app. Each tries an ordered list of regexes and returns the first full match.
@@ -332,6 +342,117 @@ Settings go in DataStore: daily limit, warning %, large-txn threshold, summary t
 - Redaction: names are replaced and account digits changed, but punctuation, spacing and structure are kept exactly.
 
 If fixtures are missing for a bank, write the parser against commonly known formats, mark it `// UNVERIFIED FORMAT` and list it in the README.
+
+### Real samples (verified) — create these fixture files from the text below, byte-for-byte including line breaks
+
+**`fixtures/sms/axis_1.txt`** (bank: AXIS)
+```
+INR 19.00 debited
+A/c no. XX9694
+09-05-25, 11:37:56
+UPI/P2M/512920989783/Google India Digita
+Not you? SMS BLOCKUPI Cust ID to 919951860002
+Axis Bank
+```
+Expected:
+```json
+{"amountPaise":1900,"direction":"DEBIT","bank":"AXIS","accountLast4":"9694","upiRef":"512920989783","upiType":"P2M","payeeName":"Google India Digita","payeeVpa":null,"timestamp":"2025-05-09T11:37:56+05:30"}
+```
+Notes:
+- Axis puts the payee name, truncated to about 20 characters, as the last `/` segment of the line `UPI/<type>/<ref>/<name>`. Prefer the full name from a notification on merge.
+- Axis multi-line debit format: amount, then account, then date/time, then the UPI line. Also support `P2A` and `P2P`.
+
+**CUB sender ID confirmed: `JK-CUBANK-S`** (key `CUBANK`). All CUB samples below come from this sender.
+
+**`fixtures/sms/cub_1.txt`** (bank: CUB)
+```
+Your a/c no. XXXXXXXX6578 is debited for Rs.376.00 on 17-09-2026 and credited to a/c no. XXXXXXXX2708 (UPI Ref no 626017540942)
+```
+Expected:
+```json
+{"amountPaise":37600,"direction":"DEBIT","bank":"CUB","accountLast4":"6578","counterpartyAcctLast4":"2708","upiRef":"626017540942","payeeName":null,"payeeVpa":null,"date":"2026-09-17","timeFrom":"SMS_RECEIVED"}
+```
+Notes:
+- This SMS has no bank name in its text, so the bank comes from the **sender ID only**. This single-line template is also used by other banks, so map it via sender ID, not text.
+- The counterparty is an account number. If `2708` matches an own account, run self-transfer pairing.
+
+**`fixtures/sms/cub_2.txt`** (bank: CUB; received 2026-08-07 13:46 IST)
+```
+Your a/c no. XXXXXXXX6578 is debited for Rs.29.00 on 07-08-2026 and credited to a/c no. XXXXXXXX1614 (UPI Ref no 621970896384)
+```
+Expected:
+```json
+{"amountPaise":2900,"direction":"DEBIT","bank":"CUB","accountLast4":"6578","counterpartyTail":"1614","upiRef":"621970896384","timestamp":"2026-08-07T13:46:00+05:30"}
+```
+
+**`fixtures/sms/cub_3.txt`** (bank: CUB; received 2026-08-07 15:12 IST)
+```
+Your a/c no. XXXXXXXX6578 is debited for Rs.407.00 on 07-08-2026 and credited to a/c no. XXXXXXXXIPAY (UPI Ref no 212621537807)
+```
+Expected:
+```json
+{"amountPaise":40700,"direction":"DEBIT","bank":"CUB","accountLast4":"6578","counterpartyTail":"IPAY","upiRef":"212621537807","timestamp":"2026-08-07T15:12:00+05:30"}
+```
+Notes:
+- The counterparty tail can be **alphanumeric**: here `IPAY` is a merchant or payment-aggregator handle, not an account. Parse it as `counterpartyTail` with the regex `X+([A-Z0-9]{2,6})`.
+  - Only a numeric tail is eligible for own-account or self-transfer matching.
+  - An alphabetic tail is treated as a merchant: payee name = tail, default category Uncategorised.
+- One digit of this ref was obscured in the user's screenshot, so the ref here is a stand-in. It starts with `2`, so it does **not** follow the RRN year/day pattern. This confirms the RRN date check must stay soft and never reject.
+
+**`fixtures/sms/cub_4.txt`** (bank: CUB; credit; **non-UPI** NACH)
+```
+Savings No XXXXXXXX78 credited with INR 161.00 towards BY ONL NACH_CR/NMDC LTD/ACH_CR/0000060167311:: CA 5109090102 on 23-OCT-2026.Avl Bal 4006.73
+```
+Expected:
+```json
+{"amountPaise":16100,"direction":"CREDIT","bank":"CUB","accountTail":"78","app":"NON_UPI","upiRef":null,"payeeName":"NMDC LTD","balanceAfterPaise":400673,"date":"2026-10-23","timeFrom":"SMS_RECEIVED","incomeCategory":"Dividends & Interest"}
+```
+Notes:
+- **Only 2 trailing account digits are given.** Generalise `accountLast4` into `accountTail` (2–4 characters).
+  - Match by suffix against known accounts of the same bank. With exactly one match (`6578` ends in `78`), assign it.
+  - With zero or several matches, save the transaction as Unassigned and send it to the Review inbox, which offers "Always use this account" and creates an `AccountMatchRule`.
+- The account type prefix can be `Savings No`, `a/c no.` or `A/c`.
+- The date format is `dd-MMM-yyyy` with an uppercase month.
+- The balance has no currency symbol: `Avl Bal 4006.73`.
+- The text was transcribed from a screenshot. The parser must tolerate any whitespace or newline variation, and optional spaces after `/`.
+- `NACH_CR` / `ACH_CR` mean a bank-transfer credit; the payee is the segment after `NACH_CR/`.
+
+**Income categories** (credits only, kept separate from spending categories):
+- Salary
+- Dividends & Interest (keywords: `NACH_CR`, `ACH_CR`, `DIVIDEND`, `INT.PD`, `INTEREST`)
+- Refund
+- Transfer In (from people or own accounts)
+- Other Income
+
+The Insights screen shows a monthly Income vs Spend card.
+
+**`fixtures/sms/hdfc_1.txt`** (bank: HDFC)
+```
+Sent Rs.200.00
+From HDFC Bank A/C *9924
+To EVEREST SYSTEMS YOGANAND 
+On 07/01/26
+Ref 600792645725
+Not You?
+Call 18002586161/SMS BLOCK UPI to 7308080808
+```
+Expected:
+```json
+{"amountPaise":20000,"direction":"DEBIT","bank":"HDFC","accountLast4":"9924","upiRef":"600792645725","payeeName":"EVEREST SYSTEMS YOGANAND","payeeVpa":null,"date":"2026-01-07","timeFrom":"SMS_RECEIVED"}
+```
+Notes:
+- HDFC multi-line "Sent" format: `Sent Rs.<amt>` / `From HDFC Bank A/C *<last4>` / `To <name>` / `On dd/MM/yy` / `Ref <rrn>`.
+- Trim trailing spaces from the name. Ignore the "Not You?" footer.
+- Also support the HDFC credit variant ("Received Rs.… / In HDFC Bank A/C *… / From …"), marked `// UNVERIFIED FORMAT` until a sample is added.
+
+`timeFrom: SMS_RECEIVED` in a test means the test injects a received timestamp on the same date, and asserts that the output uses it.
+
+**Still missing** (write these parsers against common formats, marked `// UNVERIFIED FORMAT`):
+- UPI credit SMS for HDFC and Axis, and a UPI (P2P) credit for CUB
+- Sender IDs for HDFC and Axis. Keep `HDFCBK`, `HDFCBN` and `AXISBK` as defaults, editable in Settings.
+- GPay and Paytm notification texts
+
+Debug capture mode and the Review inbox exist to tune these after install.
 
 ## Out of scope (v1)
 iOS, cloud sync, any network calls, LLM features, Account Aggregator, Play Store compliance.
