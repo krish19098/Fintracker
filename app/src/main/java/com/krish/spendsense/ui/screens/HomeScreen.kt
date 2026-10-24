@@ -67,7 +67,7 @@ fun HomeScreen(nav: NavController) {
     val ref = rememberRefData()
     val today = LocalDate.now(ParseUtils.IST)
     val month = YearMonth.from(today)
-    val monthRows by remember(month) { c.repository.observeRange(Dates.startOf(month.atDay(1)), Dates.endOf(today)) }
+    val monthRows by remember(month, today) { c.repository.observeRange(Dates.startOf(month.atDay(1)), Dates.endOf(today)) }
         .collectAsStateWithLifecycle(emptyList())
     val review by remember { c.repository.observeNeedsReview() }.collectAsStateWithLifecycle(emptyList())
     val unparsed by remember { c.repository.observeUnparsed() }.collectAsStateWithLifecycle(emptyList())

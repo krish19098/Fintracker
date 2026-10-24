@@ -281,6 +281,12 @@ fun EmptyState(icon: ImageVector, title: String, text: String, actionLabel: Stri
     }
 }
 
+/** Shown when a screen's row was deleted (e.g. opened from an old notification or the back stack). */
+@Composable
+fun MissingScreen(title: String, text: String, onBack: () -> Unit) = ScreenScaffold(title, onBack = onBack) { padding ->
+    Box(Modifier.padding(padding)) { EmptyState(Icons.AutoMirrored.Filled.HelpOutline, "Not found", text) }
+}
+
 @Composable
 fun SectionTitle(text: String, modifier: Modifier = Modifier) =
     Text(text, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, modifier = modifier.padding(start = 16.dp, top = 20.dp, bottom = 6.dp))

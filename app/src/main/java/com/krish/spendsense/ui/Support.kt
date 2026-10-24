@@ -20,6 +20,13 @@ import com.krish.spendsense.data.Category
 import com.krish.spendsense.data.SimProfile
 import com.krish.spendsense.ingest.TxnNotificationListener
 import com.krish.spendsense.ui.components.LocalContainer
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
+
+/** A row lookup that tells "still loading" (no value yet) apart from "row doesn't exist" (value == null). */
+class Loaded<T>(val value: T?)
+
+fun <T> Flow<T?>.loaded(): Flow<Loaded<T>> = map { Loaded(it) }
 
 /** Reference data most screens need, collected once per screen. */
 data class RefData(val accounts: List<Account>, val categories: List<Category>, val sims: List<SimProfile>, val settings: AppSettings) {

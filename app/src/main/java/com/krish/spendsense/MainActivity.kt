@@ -31,7 +31,9 @@ class MainActivity : FragmentActivity() {
         super.onCreate(savedInstanceState)
         window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
         enableEdgeToEdge()
-        launch.value = LaunchRequest.from(intent)
+        // Only a fresh start reads the launch intent; after rotation or process death the restored
+        // back stack already contains the screen, and re-reading it would open it a second time.
+        if (savedInstanceState == null) launch.value = LaunchRequest.from(intent)
         val container = (application as SpendSenseApp).container
         setContent {
             SpendSenseTheme {
@@ -42,6 +44,7 @@ class MainActivity : FragmentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        setIntent(intent)
         launch.value = LaunchRequest.from(intent)
     }
 

@@ -38,7 +38,8 @@ object ParseUtils {
         val s = raw.replace(",", "").trim()
         if (s.isEmpty()) return null
         val parts = s.split('.')
-        if (parts.size > 2) return null
+        // 15 rupee digits (₹ 100 lakh crore) is far beyond any real amount and keeps rupees * 100 from overflowing.
+        if (parts.size > 2 || parts[0].length > 15) return null
         val rupees = parts[0].ifEmpty { "0" }.toLongOrNull() ?: return null
         val fracRaw = parts.getOrNull(1) ?: ""
         if (fracRaw.length > 2 || !fracRaw.all { it.isDigit() }) return null

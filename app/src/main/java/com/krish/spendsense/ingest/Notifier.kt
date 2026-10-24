@@ -1,16 +1,20 @@
 package com.krish.spendsense.ingest
 
+import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.widget.Toast
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.RemoteInput
+import androidx.core.content.ContextCompat
 import com.krish.spendsense.MainActivity
 import com.krish.spendsense.R
 import com.krish.spendsense.data.Account
@@ -69,6 +73,9 @@ class Notifier(private val context: Context) {
 
     private fun post(id: Int, n: NotificationCompat.Builder) {
         if (!nm.areNotificationsEnabled()) return
+        if (Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) return
         try {
             nm.notify(id, n.build())
         } catch (_: SecurityException) {

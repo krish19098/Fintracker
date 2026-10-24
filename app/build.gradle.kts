@@ -62,8 +62,9 @@ android {
         unitTests.isReturnDefaultValues = true
     }
     lint {
+        // `./gradlew lint` runs in CI and must fail on real errors; warnings are reported only.
+        abortOnError = true
         checkReleaseBuilds = false
-        abortOnError = false
     }
     packaging {
         resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
@@ -107,4 +108,7 @@ dependencies {
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.robolectric)
     testImplementation(libs.androidx.test.core)
+    testImplementation(platform(libs.compose.bom))
+    testImplementation(libs.compose.ui.test.junit4)
+    testImplementation(libs.work.testing)
 }

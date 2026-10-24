@@ -12,7 +12,8 @@ import kotlinx.coroutines.launch
 class SmsReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != Telephony.Sms.Intents.SMS_RECEIVED_ACTION) return
-        val messages = Telephony.Sms.Intents.getMessagesFromIntent(intent)?.filterNotNull().orEmpty()
+        // Malformed PDUs can make the platform parser throw; such a broadcast is just skipped.
+        val messages = runCatching { Telephony.Sms.Intents.getMessagesFromIntent(intent)?.filterNotNull() }.getOrNull().orEmpty()
         if (messages.isEmpty()) return
         val extras = intent.extras
         val subId = listOf("subscription", SubscriptionManager.EXTRA_SUBSCRIPTION_INDEX, "android.telephony.extra.SUBSCRIPTION_INDEX")

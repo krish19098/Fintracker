@@ -27,7 +27,7 @@ object Money {
     }
 
     /** Rupee-rounded format for summaries and insights. */
-    fun short(paise: Long): String = format((paise + 50) / 100 * 100)
+    fun short(paise: Long): String = format((kotlin.math.abs(paise) + 50) / 100 * 100 * (if (paise < 0) -1 else 1))
 
     /** User input such as "1,250.50" -> paise. */
     fun parse(input: String): Long? = ParseUtils.parseAmountPaise(input.replace("₹", "").trim())
@@ -46,6 +46,12 @@ object Dates {
     fun day(d: LocalDate): String = dayFmt.format(d)
     fun time(ts: Long): String = timeFmt.format(zoned(ts))
     fun full(ts: Long): String = fullFmt.format(zoned(ts))
+
+    /** Orders a user-picked range and caps it at [today], so start <= end <= today always holds. */
+    fun clampRange(from: LocalDate, to: LocalDate, today: LocalDate): Pair<LocalDate, LocalDate> {
+        val end = minOf(maxOf(from, to), today)
+        return minOf(from, to, end) to end
+    }
 
     fun startOf(d: LocalDate): Long = d.atStartOfDay(ParseUtils.IST).toInstant().toEpochMilli()
     fun endOf(d: LocalDate): Long = startOf(d.plusDays(1)) - 1

@@ -56,13 +56,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.krish.spendsense.BuildConfig
+import com.krish.spendsense.CrashLog
 import com.krish.spendsense.data.Backup
 import com.krish.spendsense.data.Category
 import com.krish.spendsense.data.CategoryKind
@@ -74,6 +78,7 @@ import com.krish.spendsense.ingest.Work
 import com.krish.spendsense.parse.IncomeKind
 import com.krish.spendsense.ui.Perms
 import com.krish.spendsense.ui.Routes
+import com.krish.spendsense.ui.navigateTab
 import com.krish.spendsense.ui.components.COLORS
 import com.krish.spendsense.ui.components.CategoryAvatar
 import com.krish.spendsense.ui.components.ConfirmDialog
@@ -119,7 +124,7 @@ fun SettingsScreen(nav: NavController) {
             item {
                 SettingRow(
                     "Re-scan last 180 days", if (s.backfillDone) "Already done · safe to run again (no duplicates)" else "Not run yet",
-                    Icons.Filled.History, onClick = { Backfill.start(ctx); nav.navigate(Routes.HOME) },
+                    Icons.Filled.History, onClick = { Backfill.start(ctx); nav.navigateTab(Routes.HOME) },
                 )
             }
             item {
@@ -522,6 +527,9 @@ fun BackupScreen(nav: NavController) {
 
 @Composable
 fun AboutScreen(nav: NavController) {
+    val ctx = LocalContext.current
+    val clipboard = LocalClipboardManager.current
+    var crashLog by remember { mutableStateOf(CrashLog.read(ctx)) }
     ScreenScaffold("About", onBack = { nav.popBackStack() }) { padding ->
         Column(Modifier.padding(padding).padding(16.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("SpendSense ${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.titleLarge)
@@ -533,6 +541,17 @@ fun AboutScreen(nav: NavController) {
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Row { Icon(Icons.Filled.BugReport, contentDescription = null); Spacer(Modifier.size(8.dp)); Text("Personal build — not from the Play Store.") }
+            SectionTitle("Last crash", Modifier.padding(start = 0.dp))
+            val crash = crashLog
+            if (crash == null) {
+                Text("No crash recorded.", style = MaterialTheme.typography.bodySmall)
+            } else {
+                Text(crash, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = { clipboard.setText(AnnotatedString(crash)) }) { Text("Copy") }
+                    OutlinedButton(onClick = { CrashLog.clear(ctx); crashLog = null }) { Text("Clear") }
+                }
+            }
         }
     }
 }

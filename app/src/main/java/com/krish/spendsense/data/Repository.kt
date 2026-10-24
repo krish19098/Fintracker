@@ -127,8 +127,13 @@ class Repository(
             }
         }
 
-        val incoming = TxnMerge.toTxn(p, rawHash, accountId, senderKey)
-        val existing = p.upiRef?.let { txns.byRef(it) } ?: TxnMerge.findFallback(
+        var incoming = TxnMerge.toTxn(p, rawHash, accountId, senderKey)
+        val byRef = p.upiRef?.let { txns.byRef(it) }
+        // The same RRN in the opposite direction is the other leg of a transfer between the user's own
+        // accounts, not a duplicate: keep it as its own row (upiRef is unique, so the ref stays on the first leg).
+        val refTwin = byRef?.takeIf { it.direction != p.direction }
+        if (refTwin != null) incoming = incoming.copy(upiRef = null)
+        val existing = byRef?.takeIf { refTwin == null } ?: TxnMerge.findFallback(
             incoming,
             txns.window(p.amountPaise, p.direction, p.timestamp - TxnMerge.FALLBACK_WINDOW_MS, p.timestamp + TxnMerge.FALLBACK_WINDOW_MS),
         )
@@ -143,7 +148,8 @@ class Repository(
         }
 
         val classified = classify(incoming, p.incomeHint, s)
-        val saved = link(classified.copy(id = txns.insert(classified)))
+        val inserted = classified.copy(id = txns.insert(classified))
+        val saved = refTwin?.let { pairRefTwins(inserted, it) } ?: link(inserted)
         IngestResult.Saved(saved, inserted = true, newAccount = newAccount, simMoved = simMoved)
     }
 
@@ -155,6 +161,13 @@ class Repository(
         val d = categorizer().categorize(t, hint)
         val reason = Exclusions.autoReason(t, accounts.all().filter { it.isOwn }, s.ownVpas, s.ccPayees)
         return t.copy(categoryId = d.categoryId, needsReview = d.needsReview && reason == null, excludedReason = reason)
+    }
+
+    /** Both legs of one RRN on two different accounts: a self-transfer, unless the user decided otherwise. */
+    private suspend fun pairRefTwins(t: Txn, twin: Txn): Txn {
+        if (t.accountId == null || twin.accountId == null || t.accountId == twin.accountId || t.exclusionUserSet || twin.exclusionUserSet) return link(t)
+        txns.update(twin.copy(excludedReason = ExcludedReason.SELF_TRANSFER, linkedTxnId = t.id, needsReview = false))
+        return t.copy(excludedReason = ExcludedReason.SELF_TRANSFER, linkedTxnId = twin.id, needsReview = false).also { txns.update(it) }
     }
 
     /** Self-transfer pairing and refund linking against existing rows. */
@@ -270,7 +283,13 @@ class Repository(
 
     suspend fun deleteAccount(id: Long, deleteTransactions: Boolean) = db.withTransaction {
         val a = accounts.byId(id) ?: return@withTransaction
-        if (deleteTransactions) txns.deleteByAccount(id) else txns.unassignAccount(id)
+        if (deleteTransactions) {
+            // Refunds / transfer legs elsewhere must not stay linked to rows that are about to go.
+            txns.unlinkFromAccount(id)
+            txns.deleteByAccount(id)
+        } else {
+            txns.unassignAccount(id)
+        }
         senders.deleteFor(id)
         rules.deleteMatchRulesFor(id)
         accounts.delete(a)

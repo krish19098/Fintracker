@@ -83,6 +83,7 @@ import com.patrykandpatrick.vico.core.cartesian.axis.VerticalAxis
 import com.patrykandpatrick.vico.core.cartesian.data.CartesianChartModelProducer
 import com.patrykandpatrick.vico.core.cartesian.data.CartesianValueFormatter
 import com.patrykandpatrick.vico.core.cartesian.data.columnSeries
+import com.patrykandpatrick.vico.core.common.data.ExtraStore
 import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.LocalDate
@@ -110,17 +111,20 @@ fun InsightsScreen(nav: NavController) {
         Period.DAY -> today to today
         Period.WEEK -> today.minusDays(6) to today
         Period.MONTH -> YearMonth.from(today).atDay(1) to today
-        Period.CUSTOM -> LocalDate.ofEpochDay(customFrom) to LocalDate.ofEpochDay(customTo)
+        Period.CUSTOM -> Dates.clampRange(LocalDate.ofEpochDay(customFrom), LocalDate.ofEpochDay(customTo), today)
     }
     // Four full months back feed the trend rules (median, recurring, month-over-month).
     val loadFrom = minOf(from, YearMonth.from(today).minusMonths(4).atDay(1))
-    val all by remember(loadFrom) { c.repository.observeRange(Dates.startOf(loadFrom), Dates.endOf(today)) }.collectAsStateWithLifecycle(emptyList())
-    val scoped = if (accountId == null) all else all.filter { it.accountId == accountId }
+    val all by remember(loadFrom, today) { c.repository.observeRange(Dates.startOf(loadFrom), Dates.endOf(today)) }.collectAsStateWithLifecycle(emptyList())
+    // Computed only when inputs change, not on every recomposition while switching periods.
+    val scoped = remember(all, accountId) { if (accountId == null) all else all.filter { it.accountId == accountId } }
     val excluded = if (accountId == null) ref.excludedAccounts else emptySet()
-    val rows = scoped.filter { Dates.date(it.timestamp) in from..to }
+    val rows = remember(scoped, from, to) { scoped.filter { Dates.date(it.timestamp) in from..to } }
     val engine = remember(ref.categories, excluded) { InsightsEngine(ref.categories, excluded) }
-    val cards = engine.all(scoped, today, accountId?.let { ref.accountById[it]?.dailyLimitPaise } ?: ref.settings.dailyLimitPaise, ref.settings.monthlyBudget(YearMonth.from(today)))
-    val recurring = engine.recurring(scoped, today)
+    val dailyLimit = accountId?.let { ref.accountById[it]?.dailyLimitPaise } ?: ref.settings.dailyLimitPaise
+    val monthlyBudget = ref.settings.monthlyBudget(YearMonth.from(today))
+    val cards = remember(engine, scoped, today, dailyLimit, monthlyBudget) { engine.all(scoped, today, dailyLimit, monthlyBudget) }
+    val recurring = remember(engine, scoped, today) { engine.recurring(scoped, today) }
 
     ScreenScaffold("Insights") { padding ->
         LazyColumn(Modifier.padding(padding)) {
@@ -177,9 +181,11 @@ fun InsightsScreen(nav: NavController) {
     }
 
     if (pickRange) {
+        // DateRangePickerState rejects a start after the end, so seed it with the normalised range.
+        val (initFrom, initTo) = Dates.clampRange(LocalDate.ofEpochDay(customFrom), LocalDate.ofEpochDay(customTo), today)
         val state = rememberDateRangePickerState(
-            initialSelectedStartDateMillis = LocalDate.ofEpochDay(customFrom).atStartOfDay().toInstant(ZoneOffset.UTC).toEpochMilli(),
-            initialSelectedEndDateMillis = LocalDate.ofEpochDay(customTo).atStartOfDay().toInstant(ZoneOffset.UTC).toEpochMilli(),
+            initialSelectedStartDateMillis = initFrom.atStartOfDay().toInstant(ZoneOffset.UTC).toEpochMilli(),
+            initialSelectedEndDateMillis = initTo.atStartOfDay().toInstant(ZoneOffset.UTC).toEpochMilli(),
         )
         DatePickerDialog(
             onDismissRequest = { pickRange = false },
@@ -188,8 +194,13 @@ fun InsightsScreen(nav: NavController) {
                     val s = state.selectedStartDateMillis
                     val e = state.selectedEndDateMillis ?: s
                     if (s != null && e != null) {
-                        customFrom = Instant.ofEpochMilli(s).atZone(ZoneOffset.UTC).toLocalDate().toEpochDay()
-                        customTo = minOf(Instant.ofEpochMilli(e).atZone(ZoneOffset.UTC).toLocalDate(), today).toEpochDay()
+                        val (f, t) = Dates.clampRange(
+                            Instant.ofEpochMilli(s).atZone(ZoneOffset.UTC).toLocalDate(),
+                            Instant.ofEpochMilli(e).atZone(ZoneOffset.UTC).toLocalDate(),
+                            today,
+                        )
+                        customFrom = f.toEpochDay()
+                        customTo = t.toEpochDay()
                     }
                     pickRange = false
                 }) { Text("OK") }
@@ -253,6 +264,15 @@ private fun CategoryCard(rows: List<Txn>, ref: RefData, excluded: Set<Long>) {
     }
 }
 
+private val XLabelsKey = ExtraStore.Key<List<String>>()
+
+/** Reads labels from the model being drawn; Vico throws if a formatter returns an empty string. */
+private val XLabels = CartesianValueFormatter { context, x, _ ->
+    context.model.extraStore.getOrNull(XLabelsKey)?.getOrNull(x.toInt())?.takeIf { it.isNotEmpty() } ?: x.toInt().toString()
+}
+
+private val YLabels = CartesianValueFormatter { _, y, _ -> Money.short(y.toLong() * 100) }
+
 /** Spend over time: by time of day for a single day, by day up to ~2 months, by month beyond. */
 @Composable
 private fun SpendBarsCard(rows: List<Txn>, from: LocalDate, to: LocalDate, period: Period, excluded: Set<Long>) {
@@ -276,11 +296,14 @@ private fun SpendBarsCard(rows: List<Txn>, from: LocalDate, to: LocalDate, perio
         }
     }
     val producer = remember { CartesianChartModelProducer() }
-    LaunchedEffect(values) {
-        producer.runTransaction { columnSeries { series(values.map { it.coerceAtLeast(0) / 100 }) } }
+    LaunchedEffect(labels, values) {
+        // Vico rejects an empty series; labels go into the same model so they always match its x values.
+        if (values.isEmpty()) return@LaunchedEffect
+        producer.runTransaction {
+            columnSeries { series(values.map { it.coerceAtLeast(0) / 100 }) }
+            extras { it[XLabelsKey] = labels }
+        }
     }
-    val xLabels = CartesianValueFormatter { _, x, _ -> labels.getOrElse(x.toInt()) { "" } }
-    val yLabels = CartesianValueFormatter { _, y, _ -> Money.short(y.toLong() * 100) }
     InfoCard {
         Text("Spend over time", style = MaterialTheme.typography.titleMedium)
         Spacer(Modifier.size(8.dp))
@@ -288,8 +311,8 @@ private fun SpendBarsCard(rows: List<Txn>, from: LocalDate, to: LocalDate, perio
             CartesianChartHost(
                 rememberCartesianChart(
                     rememberColumnCartesianLayer(),
-                    startAxis = VerticalAxis.rememberStart(valueFormatter = yLabels),
-                    bottomAxis = HorizontalAxis.rememberBottom(valueFormatter = xLabels),
+                    startAxis = VerticalAxis.rememberStart(valueFormatter = YLabels),
+                    bottomAxis = HorizontalAxis.rememberBottom(valueFormatter = XLabels),
                 ),
                 producer,
                 Modifier.fillMaxWidth().height(200.dp),

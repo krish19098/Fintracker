@@ -68,8 +68,12 @@ interface TxnDao {
     @Query("UPDATE txn SET categoryId = :to WHERE categoryId = :from")
     suspend fun moveCategory(from: Long, to: Long)
 
-    @Query("UPDATE txn SET linkedTxnId = NULL, excludedReason = NULL WHERE linkedTxnId = :id AND exclusionUserSet = 0")
+    /** Clears links to a removed row; an exclusion the user set by hand is kept. */
+    @Query("UPDATE txn SET linkedTxnId = NULL, excludedReason = CASE WHEN exclusionUserSet = 1 THEN excludedReason ELSE NULL END WHERE linkedTxnId = :id")
     suspend fun unlinkFrom(id: Long)
+
+    @Query("UPDATE txn SET linkedTxnId = NULL, excludedReason = CASE WHEN exclusionUserSet = 1 THEN excludedReason ELSE NULL END WHERE linkedTxnId IN (SELECT id FROM txn WHERE accountId = :accountId) AND (accountId IS NULL OR accountId != :accountId)")
+    suspend fun unlinkFromAccount(accountId: Long)
 
     @Query("SELECT * FROM txn WHERE accountId IS NULL AND senderKey = :senderKey AND accountTail = :tail")
     suspend fun unassignedFor(senderKey: String, tail: String): List<Txn>

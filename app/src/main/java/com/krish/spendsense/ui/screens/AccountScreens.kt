@@ -67,6 +67,8 @@ import com.krish.spendsense.ui.components.EmptyState
 import com.krish.spendsense.ui.components.ICONS
 import com.krish.spendsense.ui.components.InfoCard
 import com.krish.spendsense.ui.components.LocalContainer
+import com.krish.spendsense.ui.components.MissingScreen
+import com.krish.spendsense.ui.loaded
 import com.krish.spendsense.ui.components.MoneyField
 import com.krish.spendsense.ui.components.ScreenScaffold
 import com.krish.spendsense.ui.components.SectionTitle
@@ -278,12 +280,13 @@ fun AccountEditScreen(nav: NavController, id: Long) {
     val c = LocalContainer.current
     val ref = rememberRefData()
     val scope = rememberCoroutineScope()
-    val account by remember(id) { c.repository.observeAccount(id) }.collectAsStateWithLifecycle(null)
+    val account by remember(id) { c.repository.observeAccount(id).loaded() }.collectAsStateWithLifecycle(null)
     val senders by remember { c.repository.observeSenders() }.collectAsStateWithLifecycle(emptyList())
     var deleting by remember { mutableStateOf(false) }
     var merging by remember { mutableStateOf(false) }
     var addingSender by remember { mutableStateOf(false) }
-    val a = account ?: return
+    val loaded = account ?: return
+    val a = loaded.value ?: return MissingScreen("Account", "This account no longer exists.") { nav.popBackStack() }
     fun save(updated: Account) = scope.launch { c.repository.updateAccount(updated) }
 
     ScreenScaffold(a.label, onBack = { nav.popBackStack() }) { padding ->
@@ -368,12 +371,13 @@ fun AccountEditScreen(nav: NavController, id: Long) {
 fun AccountDetailScreen(nav: NavController, id: Long) {
     val c = LocalContainer.current
     val ref = rememberRefData()
-    val account by remember(id) { c.repository.observeAccount(id) }.collectAsStateWithLifecycle(null)
+    val account by remember(id) { c.repository.observeAccount(id).loaded() }.collectAsStateWithLifecycle(null)
     val balance by remember(id) { c.repository.observeLatestBalance(id) }.collectAsStateWithLifecycle(null)
     val today = LocalDate.now(ParseUtils.IST)
     val month = YearMonth.from(today)
-    val monthRows by remember(id) { c.repository.observeRange(Dates.startOf(month.atDay(1)), Dates.endOf(today)) }.collectAsStateWithLifecycle(emptyList())
-    val a = account ?: return
+    val monthRows by remember(id, today) { c.repository.observeRange(Dates.startOf(month.atDay(1)), Dates.endOf(today)) }.collectAsStateWithLifecycle(emptyList())
+    val loaded = account ?: return
+    val a = loaded.value ?: return MissingScreen("Account", "This account no longer exists.") { nav.popBackStack() }
     val rows = monthRows.filter { it.accountId == id }
     ScreenScaffold(a.label, onBack = { nav.popBackStack() }, actions = {
         IconButton(onClick = { nav.navigate(Routes.accountEdit(id)) }) { Icon(Icons.Filled.Edit, contentDescription = "Edit account") }

@@ -6,13 +6,14 @@ import com.krish.spendsense.ingest.Work
 import com.krish.spendsense.parse.ParseUtils
 import kotlinx.coroutines.launch
 
-class SpendSenseApp : Application() {
+open class SpendSenseApp : Application() {
     lateinit var container: AppContainer
         private set
 
     override fun onCreate() {
         super.onCreate()
-        container = AppContainer(this)
+        CrashLog.install(this)
+        container = createContainer()
         // Debug builds only, and never with message bodies.
         if (BuildConfig.DEBUG) ParseUtils.debugLog = { Log.d("SpendSense", it) }
         container.notifier.createChannels()
@@ -22,4 +23,6 @@ class SpendSenseApp : Application() {
             Work.scheduleAllSummaries(this@SpendSenseApp, container.settings.get())
         }
     }
+
+    protected open fun createContainer() = AppContainer(this)
 }

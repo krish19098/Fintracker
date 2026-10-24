@@ -9,7 +9,11 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
+import androidx.datastore.preferences.core.emptyPreferences
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.catch
+import java.io.IOException
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import java.time.YearMonth
@@ -41,7 +45,10 @@ data class AppSettings(
         if (monthlyBudgetPaise > 0) monthlyBudgetPaise else dailyLimitPaise * month.lengthOfMonth()
 }
 
-private val Context.dataStore by preferencesDataStore("settings")
+private val Context.dataStore by preferencesDataStore(
+    "settings",
+    corruptionHandler = ReplaceFileCorruptionHandler { emptyPreferences() },
+)
 
 /** DataStore (Preferences) for settings. */
 class SettingsStore(private val context: Context) {
@@ -69,7 +76,8 @@ class SettingsStore(private val context: Context) {
 
     private val d = AppSettings()
 
-    val flow: Flow<AppSettings> = context.dataStore.data.map { p: Preferences ->
+    // An unreadable settings file falls back to defaults instead of crashing every screen.
+    val flow: Flow<AppSettings> = context.dataStore.data.catch { e -> if (e is IOException) emit(emptyPreferences()) else throw e }.map { p: Preferences ->
         AppSettings(
             dailyLimitPaise = p[K.dailyLimit] ?: d.dailyLimitPaise,
             warnPct = p[K.warnPct] ?: d.warnPct,

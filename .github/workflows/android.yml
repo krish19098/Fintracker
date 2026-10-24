@@ -29,15 +29,18 @@ jobs:
       - name: Set up Gradle (with cache)
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Test and build release APK
-        run: ./gradlew test assembleRelease --stacktrace
+      - name: Lint, test and build release APK
+        run: ./gradlew lint test assembleRelease --stacktrace
 
       - name: Upload test reports
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: test-reports
-          path: app/build/reports/tests/
+          name: reports
+          path: |
+            app/build/reports/tests/
+            app/build/reports/lint-results-*.html
+            app/build/reports/lint-results-*.txt
 
       - name: Rename APK
         run: cp app/build/outputs/apk/release/app-release.apk app-release.apk

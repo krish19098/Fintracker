@@ -55,6 +55,8 @@ import com.krish.spendsense.ui.components.CategorySheet
 import com.krish.spendsense.ui.components.ConfirmDialog
 import com.krish.spendsense.ui.components.Dropdown
 import com.krish.spendsense.ui.components.LocalContainer
+import com.krish.spendsense.ui.components.MissingScreen
+import com.krish.spendsense.ui.loaded
 import com.krish.spendsense.ui.components.MoneyField
 import com.krish.spendsense.ui.components.ScreenScaffold
 import com.krish.spendsense.ui.components.SettingRow
@@ -76,17 +78,17 @@ fun TxnDetailScreen(nav: NavController, id: Long, openCategorySheet: Boolean) {
     val c = LocalContainer.current
     val ref = rememberRefData()
     val scope = rememberCoroutineScope()
-    val txn by remember(id) { c.repository.observeTxn(id) }.collectAsStateWithLifecycle(null)
+    val txn by remember(id) { c.repository.observeTxn(id).loaded() }.collectAsStateWithLifecycle(null)
     var recat by remember { mutableStateOf(openCategorySheet) }
     var confirmDelete by remember { mutableStateOf(false) }
     var assign by remember { mutableStateOf(false) }
-    val t = txn
+    val loaded = txn ?: return
+    val t = loaded.value ?: return MissingScreen("Transaction", "This transaction no longer exists.") { nav.popBackStack() }
 
     ScreenScaffold(
         "Transaction", onBack = { nav.popBackStack() },
         actions = { IconButton(onClick = { confirmDelete = true }) { Icon(Icons.Filled.Delete, contentDescription = "Delete transaction") } },
     ) { padding ->
-        if (t == null) return@ScreenScaffold
         var note by rememberSaveable(t.id) { mutableStateOf(t.note.orEmpty()) }
         var payee by rememberSaveable(t.id) { mutableStateOf(t.payeeName.orEmpty()) }
         val category = t.categoryId?.let { ref.categoryById[it] }
@@ -185,6 +187,7 @@ fun AddTxnScreen(nav: NavController, unparsedId: Long?) {
     var pickCat by remember { mutableStateOf(false) }
     var pickDate by remember { mutableStateOf(false) }
     var prefilled by rememberSaveable { mutableStateOf(false) }
+    var saving by remember { mutableStateOf(false) }
 
     LaunchedEffect(unparsedId) {
         if (unparsedId == null || prefilled) return@LaunchedEffect
@@ -225,8 +228,10 @@ fun AddTxnScreen(nav: NavController, unparsedId: Long?) {
             OutlinedTextField(note, { note = it }, label = { Text("Note (optional)") }, modifier = Modifier.fillMaxWidth())
             val paise = Money.parse(amount)
             Button(
-                enabled = paise != null && paise > 0,
+                // One tap saves once: a second tap would add a duplicate and pop an extra screen.
+                enabled = paise != null && paise > 0 && !saving,
                 onClick = {
+                    saving = true
                     val ts = timeOfDay?.takeIf { Dates.date(it) == d }
                         ?: d.atTime(if (d == LocalDate.now(ParseUtils.IST)) LocalTime.now(ParseUtils.IST) else LocalTime.NOON).atZone(ParseUtils.IST).toInstant().toEpochMilli()
                     scope.launch {
