@@ -32,6 +32,13 @@ jobs:
       - name: Lint, test and build release APK
         run: ./gradlew lint test assembleRelease --stacktrace
 
+      - name: Test summary
+        if: always()
+        run: |
+          for f in app/build/test-results/test*UnitTest/*.xml; do
+            grep -o '<testsuite name="[^"]*" tests="[0-9]*" skipped="[0-9]*" failures="[0-9]*" errors="[0-9]*"' "$f" || true
+          done
+
       - name: Upload test reports
         if: failure()
         uses: actions/upload-artifact@v4
