@@ -116,6 +116,37 @@ class RepositoryTest {
     }
 
     @Test
+    fun sameRefOnBothOwnAccountsIsTwoLegsNotAMerge() = runBlocking {
+        val cub = repo.createAccount("CUB", "6578", "CUB")
+        val hdfc = repo.createAccount("HDFC", "9924", "HDFC")
+        val day = LocalDate.of(2026, 9, 17)
+        val ref = "626017540942"
+        repo.ingest(ParsedTxn(37_600, Direction.DEBIT, "CUB", TestData.at(day, 10, 0), Source.SMS, TxnApp.OTHER_UPI, accountTail = "6578", upiRef = ref), "d", "CUBANK")
+        repo.ingest(ParsedTxn(37_600, Direction.CREDIT, "HDFC", TestData.at(day, 10, 20), Source.SMS, TxnApp.OTHER_UPI, accountTail = "9924", upiRef = ref), "c", "HDFCBK")
+        val rows = all()
+        assertEquals(2, rows.size)
+        assertEquals(cub, rows.first { it.direction == Direction.DEBIT }.accountId)
+        assertEquals(hdfc, rows.first { it.direction == Direction.CREDIT }.accountId)
+        assertTrue(rows.all { it.excludedReason == ExcludedReason.SELF_TRANSFER })
+        assertEquals(0L, Totals.spend(rows))
+    }
+
+    @Test
+    fun deletingAccountWithTransactionsUnlinksRefundsElsewhere() = runBlocking {
+        val a = repo.createAccount("HDFC", "9924", "A")
+        val day = LocalDate.of(2026, 10, 1)
+        repo.ingest(ParsedTxn(120_000, Direction.DEBIT, "HDFC", TestData.at(day), Source.SMS, TxnApp.OTHER_UPI, accountTail = "9924", payeeName = "Flipkart"), "a", "HDFCBK")
+        // The refund lands on another account but is linked to the debit on A.
+        repo.ingest(ParsedTxn(120_000, Direction.CREDIT, "AXIS", TestData.at(day.plusDays(2)), Source.SMS, TxnApp.OTHER_UPI, accountTail = "1111", payeeName = "Flipkart", note = "Refund"), "b", "AXISBK")
+        assertEquals(ExcludedReason.REFUND, all().first { it.direction == Direction.CREDIT }.excludedReason)
+        repo.deleteAccount(a, deleteTransactions = true)
+        val refund = all().single()
+        assertNull(refund.linkedTxnId)
+        assertNull(refund.excludedReason)
+        assertEquals(0L, Totals.spend(listOf(refund)))
+    }
+
+    @Test
     fun cubDebitToOwnAccountTailIsSelfTransfer() = runBlocking {
         repo.createAccount("CUB", "6578", "CUB")
         repo.createAccount("HDFC", "2708", "HDFC")
