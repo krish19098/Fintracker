@@ -39,6 +39,41 @@ jobs:
             grep -o '<testsuite name="[^"]*" tests="[0-9]*" skipped="[0-9]*" failures="[0-9]*" errors="[0-9]*"' "$f" || true
           done
 
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: roborazzi-screenshots
+          path: app/build/outputs/roborazzi/
+          if-no-files-found: ignore
+
+      - name: Screenshot contact sheet (log preview)
+        if: always()
+        run: |
+          python3 -m pip install --quiet pillow || exit 0
+          python3 - <<'PY'
+          import base64, glob, io, os
+          from PIL import Image
+          files = sorted(glob.glob("app/build/outputs/roborazzi/notif_*.png"))
+          if not files:
+              raise SystemExit("no screenshots")
+          imgs = [Image.open(f).convert("RGB") for f in files]
+          w = min(360, max(i.width for i in imgs))
+          thumbs = [i.resize((w, max(1, i.height * w // i.width))) for i in imgs]
+          cols = 4
+          rows = [thumbs[k:k + cols] for k in range(0, len(thumbs), cols)]
+          sheet = Image.new("RGB", (w * cols + 4 * cols, sum(max(t.height for t in r) + 4 for r in rows)), "white")
+          y = 0
+          for r in rows:
+              for c, t in enumerate(r):
+                  sheet.paste(t, (c * (w + 4), y))
+              y += max(t.height for t in r) + 4
+          buf = io.BytesIO()
+          sheet.save(buf, "PNG", optimize=True)
+          print("FILES " + " ".join(os.path.basename(f) for f in files))
+          print("SHEET_B64 " + base64.b64encode(buf.getvalue()).decode())
+          PY
+
       - name: Upload test reports
         if: failure()
         uses: actions/upload-artifact@v4
