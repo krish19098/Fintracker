@@ -14,11 +14,12 @@ object Summaries {
         val cats = repo.allCategories().associateBy { it.id }
         val excluded = repo.excludedAccountIds()
         val today = LocalDate.now(com.krish.spendsense.parse.ParseUtils.IST)
+        val sounds = c.settings.get().moneySounds
         suspend fun rows(from: LocalDate, to: LocalDate) = repo.range(Dates.startOf(from), Dates.endOf(to))
         when (kind) {
             SummaryWorker.WEEKLY -> {
                 val text = AlertEngine.digest("this week", "last week", rows(today.minusDays(6), today), rows(today.minusDays(13), today.minusDays(7)), cats, excluded)
-                c.notifier.postSummary(kind, "Weekly digest", text, openInsights = true)
+                c.notifier.postSummary(kind, "Weekly digest", text, openInsights = true, sounds = sounds)
             }
             SummaryWorker.MONTHLY -> {
                 val m = YearMonth.from(today).minusMonths(1)
@@ -27,10 +28,10 @@ object Summaries {
                     "in $name", m.minusMonths(1).month.getDisplayName(TextStyle.FULL, Locale.ENGLISH),
                     rows(m.atDay(1), m.atEndOfMonth()), rows(m.minusMonths(1).atDay(1), m.minusMonths(1).atEndOfMonth()), cats, excluded,
                 )
-                c.notifier.postSummary(kind, "$name digest", text, openInsights = true)
+                c.notifier.postSummary(kind, "$name digest", text, openInsights = true, sounds = sounds)
             }
             else -> AlertEngine.daySummary(repo.dayTxns(today), cats, excluded)?.let {
-                c.notifier.postSummary(kind, "Today's spending", it, openInsights = false)
+                c.notifier.postSummary(kind, "Today's spending", it, openInsights = false, sounds = sounds)
             }
         }
     }

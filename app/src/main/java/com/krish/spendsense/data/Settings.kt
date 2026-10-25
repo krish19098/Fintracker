@@ -33,6 +33,8 @@ data class AppSettings(
     val appLock: Boolean = true,
     val debugCapture: Boolean = false,
     val notifyEachTxn: Boolean = true,
+    /** Coin sounds for payment / limit / summary notifications; off = system default sound. */
+    val moneySounds: Boolean = true,
     val ownVpas: Set<String> = emptySet(),
     val ccPayees: Set<String> = emptySet(),
     val firedAlerts: Set<String> = emptySet(),
@@ -66,6 +68,7 @@ class SettingsStore(private val context: Context) {
         val appLock = booleanPreferencesKey("app_lock")
         val debugCapture = booleanPreferencesKey("debug_capture")
         val notifyEachTxn = booleanPreferencesKey("notify_each_txn")
+        val moneySounds = booleanPreferencesKey("money_sounds")
         val ownVpas = stringSetPreferencesKey("own_vpas")
         val ccPayees = stringSetPreferencesKey("cc_payees")
         val fired = stringSetPreferencesKey("fired_alerts")
@@ -92,6 +95,7 @@ class SettingsStore(private val context: Context) {
             appLock = p[K.appLock] ?: d.appLock,
             debugCapture = p[K.debugCapture] ?: d.debugCapture,
             notifyEachTxn = p[K.notifyEachTxn] ?: d.notifyEachTxn,
+            moneySounds = p[K.moneySounds] ?: d.moneySounds,
             ownVpas = p[K.ownVpas] ?: d.ownVpas,
             ccPayees = p[K.ccPayees] ?: d.ccPayees,
             firedAlerts = p[K.fired] ?: d.firedAlerts,
@@ -120,6 +124,7 @@ class SettingsStore(private val context: Context) {
     suspend fun setAppLock(v: Boolean) = set { it[K.appLock] = v }
     suspend fun setDebugCapture(v: Boolean) = set { it[K.debugCapture] = v }
     suspend fun setNotifyEachTxn(v: Boolean) = set { it[K.notifyEachTxn] = v }
+    suspend fun setMoneySounds(v: Boolean) = set { it[K.moneySounds] = v }
     suspend fun setOwnVpas(v: Set<String>) = set { it[K.ownVpas] = v.map(String::lowercase).toSet() }
     suspend fun setCcPayees(v: Set<String>) = set { it[K.ccPayees] = v }
     suspend fun setChecked(item: String, done: Boolean) =

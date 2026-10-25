@@ -43,7 +43,9 @@ import com.krish.spendsense.domain.Money
 import com.krish.spendsense.domain.Totals
 import com.krish.spendsense.ingest.Backfill
 import com.krish.spendsense.parse.ParseUtils
+import com.krish.spendsense.ui.MoodCoin
 import com.krish.spendsense.ui.Perms
+import com.krish.spendsense.ui.SpendStyle
 import com.krish.spendsense.ui.Routes
 import com.krish.spendsense.ui.components.EmptyState
 import com.krish.spendsense.ui.components.InfoCard
@@ -127,6 +129,7 @@ fun HomeScreen(nav: NavController) {
                 Column(Modifier.fillMaxWidth().padding(vertical = 16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     ProgressRing(fraction, ringColor, Modifier.size(220.dp)) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            MoodCoin(SpendStyle.mood(SpendStyle.percent(spentToday, limit)), 56.dp)
                             Text("Today", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Text(Money.short(spentToday), style = AmountLarge)
                             Text("of ${Money.short(limit)}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)

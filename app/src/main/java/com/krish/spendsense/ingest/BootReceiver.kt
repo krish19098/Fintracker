@@ -17,7 +17,7 @@ class BootReceiver : BroadcastReceiver() {
                 Work.schedulePeriodicScan(context)
                 Work.scheduleAllSummaries(context, c.settings.get())
                 Work.scanNow(context)
-                if (c.repository.refreshSims(c.simDetector.current()).isNotEmpty()) c.notifier.simChanged()
+                if (c.repository.refreshSims(c.simDetector.current()).isNotEmpty()) c.notifier.simChanged(c.settings.get().moneySounds)
             } finally {
                 pending.finish()
             }

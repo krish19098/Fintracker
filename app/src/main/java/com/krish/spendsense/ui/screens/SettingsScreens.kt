@@ -115,7 +115,7 @@ fun SettingsScreen(nav: NavController) {
             item { SettingRow("Accounts", "${ref.accounts.size} accounts · names, SIMs, totals, sender IDs", Icons.Filled.AccountBalance, onClick = { nav.navigate(Routes.ACCOUNTS) }) }
             item { SettingRow("Budgets & limits", "Daily ${Money.short(s.dailyLimitPaise)} · warn at ${s.warnPct}%", Icons.Filled.Tune, onClick = { nav.navigate(Routes.BUDGETS) }) }
             item { SettingRow("Categories & rules", "Edit categories, keywords and learned rules", Icons.Filled.Category, onClick = { nav.navigate(Routes.CATEGORIES) }) }
-            item { SettingRow("Notification times", "Summary at ${minuteLabel(s.summaryMinute)}", Icons.Filled.Notifications, onClick = { nav.navigate(Routes.NOTIF_TIMES) }) }
+            item { SettingRow("Notifications", "Money sounds ${if (s.moneySounds) "on" else "off"} · summary at ${minuteLabel(s.summaryMinute)}", Icons.Filled.Notifications, onClick = { nav.navigate(Routes.NOTIF_TIMES) }) }
             item {
                 SwitchRow("App lock", "Fingerprint, face or screen lock when opening", s.appLock) { v -> scope.launch { c.settings.setAppLock(v) } }
             }
@@ -338,9 +338,14 @@ fun NotificationTimesScreen(nav: NavController) {
     val scope = rememberCoroutineScope()
     val s = ref.settings
     var editing by remember { mutableIntStateOf(-1) }
-    ScreenScaffold("Notification times", onBack = { nav.popBackStack() }) { padding ->
+    ScreenScaffold("Notifications", onBack = { nav.popBackStack() }) { padding ->
         Column(Modifier.padding(padding)) {
             SwitchRow("Alert for every payment", "“₹250 → Ravi Tea Stall · Today ₹1,840 / ₹2,000”", s.notifyEachTxn) { v -> scope.launch { c.settings.setNotifyEachTxn(v) } }
+            SwitchRow(
+                "Money sounds",
+                if (s.moneySounds) "Coin clink, ka-ching or coins spilling, depending on today's spend" else "Using the system default sound",
+                s.moneySounds,
+            ) { v -> scope.launch { c.settings.setMoneySounds(v) } }
             SettingRow("End-of-day summary", minuteLabel(s.summaryMinute), onClick = { editing = 0 })
             SettingRow("Weekly digest (Sundays)", minuteLabel(s.weeklyMinute), onClick = { editing = 1 })
             SettingRow("Monthly digest (1st of the month)", minuteLabel(s.monthlyMinute), onClick = { editing = 2 })
