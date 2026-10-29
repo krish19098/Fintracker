@@ -132,7 +132,10 @@ private val filterSaver = Saver<TxnFilter, String>(save = { Json.encodeToString(
 fun TransactionsScreen(nav: NavController) {
     ScreenScaffold(
         title = "Transactions",
-        fab = { FloatingActionButton(onClick = { nav.navigate(Routes.add()) }) { Icon(Icons.Filled.Add, contentDescription = "Add cash or manual transaction") } },
+        fab = { FloatingActionButton(
+            onClick = { nav.navigate(Routes.add()) }, shape = CircleShape,
+            containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary,
+        ) { Icon(Icons.Filled.Add, contentDescription = "Add cash or manual transaction") } },
     ) { padding -> TxnBrowser(nav, fixedAccountId = null, modifier = Modifier.padding(padding)) }
 }
 

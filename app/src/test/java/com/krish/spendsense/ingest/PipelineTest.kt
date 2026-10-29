@@ -85,7 +85,8 @@ class PipelineTest {
         app.sendBroadcast(intent)
         shadowOf(Looper.getMainLooper()).idle()
         val deadline = System.currentTimeMillis() + 10_000
-        while (System.currentTimeMillis() < deadline && shadowOf(nm).allNotifications.isEmpty()) Thread.sleep(50)
+        // The receiver works on a background coroutine: wait for its last step (the log line follows the post).
+        while (System.currentTimeMillis() < deadline && !log().contains("payment alert")) Thread.sleep(50)
 
         val today = runBlocking { c.repository.dayTxns(LocalDate.now(ParseUtils.IST)) }
         assertEquals(25_000L, today.single().amountPaise)
