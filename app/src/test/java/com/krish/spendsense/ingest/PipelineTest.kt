@@ -90,8 +90,10 @@ class PipelineTest {
 
         val today = runBlocking { c.repository.dayTxns(LocalDate.now(ParseUtils.IST)) }
         assertEquals(25_000L, today.single().amountPaise)
-        val n = shadowOf(nm).allNotifications.single()
+        // The first SMS from this account also posts "New account found"; pick the payment alert.
+        val n = shadowOf(nm).allNotifications.single { it.extras.getCharSequence("android.title").toString().startsWith("₹250") }
         assertEquals(SpendStyle.CH_CALM, n.channelId)
+        assertTrue(titles().toString(), titles().any { it.startsWith("New account found: HDFC") })
         assertTrue(log(), log().contains("receiver: SMS broadcast received"))
         assertTrue(log(), log().contains("saved"))
         assertTrue(log(), log().contains("payment alert posted"))
