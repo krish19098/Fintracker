@@ -42,6 +42,9 @@ data class AppSettings(
     val listenerDisconnectedAt: Long = 0,
     /** Ticked Xiaomi reliability steps (autostart, battery, recents lock). */
     val checklist: Set<String> = emptySet(),
+    /** Last time the inbox scanner had to catch bank SMS the live receiver never got, and how many (last 7 days). */
+    val receiverMissAt: Long = 0,
+    val receiverMissCount: Int = 0,
 ) {
     fun monthlyBudget(month: YearMonth): Long =
         if (monthlyBudgetPaise > 0) monthlyBudgetPaise else dailyLimitPaise * month.lengthOfMonth()
@@ -75,6 +78,8 @@ class SettingsStore(private val context: Context) {
         val listenerUp = longPreferencesKey("listener_up")
         val listenerDown = longPreferencesKey("listener_down")
         val checklist = stringSetPreferencesKey("checklist")
+        val receiverMissAt = longPreferencesKey("receiver_miss_at")
+        val receiverMissCount = intPreferencesKey("receiver_miss_count")
     }
 
     private val d = AppSettings()
@@ -102,6 +107,8 @@ class SettingsStore(private val context: Context) {
             listenerConnectedAt = p[K.listenerUp] ?: 0,
             listenerDisconnectedAt = p[K.listenerDown] ?: 0,
             checklist = p[K.checklist] ?: emptySet(),
+            receiverMissAt = p[K.receiverMissAt] ?: 0,
+            receiverMissCount = p[K.receiverMissCount] ?: 0,
         )
     }
 
@@ -127,6 +134,16 @@ class SettingsStore(private val context: Context) {
     suspend fun setMoneySounds(v: Boolean) = set { it[K.moneySounds] = v }
     suspend fun setOwnVpas(v: Set<String>) = set { it[K.ownVpas] = v.map(String::lowercase).toSet() }
     suspend fun setCcPayees(v: Set<String>) = set { it[K.ccPayees] = v }
+    /** Forgets which limit alerts were already sent (used by tests to start from a clean day). */
+    suspend fun clearFiredAlerts() = set { it.remove(K.fired) }
+
+        /** Counts receiver misses within a rolling 7-day window. */
+    suspend fun recordReceiverMiss(at: Long, count: Int) = set { p ->
+        val recent = (p[K.receiverMissAt] ?: 0) > at - 7L * 24 * 3600_000
+        p[K.receiverMissCount] = (if (recent) p[K.receiverMissCount] ?: 0 else 0) + count
+        p[K.receiverMissAt] = at
+    }
+
     suspend fun setChecked(item: String, done: Boolean) =
         set { p -> p[K.checklist] = (p[K.checklist] ?: emptySet()).let { if (done) it + item else it - item } }
     suspend fun setListenerState(connected: Boolean, at: Long) =

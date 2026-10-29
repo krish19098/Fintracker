@@ -9,6 +9,7 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.krish.spendsense.SpendSenseApp
+import com.krish.spendsense.widget.SpendWidget
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import java.util.concurrent.TimeUnit
@@ -21,12 +22,14 @@ class BackfillWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(c
         val messages = SmsInbox.read(applicationContext, since)
         var latest = since
         messages.forEachIndexed { i, m ->
-            c.ingestor.onSms(m.address, m.body, m.dateSent, m.date, m.subId, alert = false)
+            c.ingestor.onSms(m.address, m.body, m.dateSent, m.date, m.subId, alert = false, via = "backfill")
             latest = maxOf(latest, m.date)
             if (i % 25 == 0) setProgress(workDataOf(Backfill.DONE to i, Backfill.TOTAL to messages.size))
         }
         c.settings.setLastScan(latest)
         c.settings.setBackfillDone(true)
+        c.log("backfill: read ${messages.size} SMS from the last ${Backfill.DAYS} days")
+        SpendWidget.refresh(applicationContext)
         return Result.success(workDataOf(Backfill.DONE to messages.size, Backfill.TOTAL to messages.size))
     }
 }

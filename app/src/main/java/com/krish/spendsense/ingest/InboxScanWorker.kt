@@ -15,6 +15,7 @@ import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.krish.spendsense.SpendSenseApp
 import com.krish.spendsense.data.AppSettings
+import com.krish.spendsense.widget.SpendWidget
 import java.time.DayOfWeek
 import java.time.Duration
 import java.time.LocalTime
@@ -59,6 +60,11 @@ object SmsInbox {
 
 /** Every 15 minutes and on app open: catches anything the receiver missed. */
 class InboxScanWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, params) {
+    companion object {
+        /** The receiver normally stores an SMS within seconds; older first-time finds were missed by it. */
+        const val RECEIVER_GRACE_MS = 3 * 60_000L
+    }
+
     override suspend fun doWork(): Result {
         val c = (applicationContext as SpendSenseApp).container
         val s = c.settings.get()
@@ -66,11 +72,19 @@ class InboxScanWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(
         // Before the first backfill only the last day is scanned; backfill covers the rest.
         val since = if (s.lastScanTs > 0) s.lastScanTs else now - TimeUnit.DAYS.toMillis(1)
         var latest = since
+        var missed = 0
         for (m in SmsInbox.read(applicationContext, since)) {
-            c.ingestor.onSms(m.address, m.body, m.dateSent, m.date, m.subId, alert = now - m.date < TimeUnit.HOURS.toMillis(2))
+            val isNew = c.ingestor.onSms(m.address, m.body, m.dateSent, m.date, m.subId, alert = now - m.date < TimeUnit.HOURS.toMillis(2), via = "scanner")
+            // A bank SMS first stored here, minutes after it arrived, never reached the live receiver.
+            if (isNew && s.lastScanTs > 0 && now - m.date > RECEIVER_GRACE_MS) missed++
             latest = maxOf(latest, m.date)
         }
         c.settings.setLastScan(latest)
+        if (missed > 0) {
+            c.log("scanner: caught $missed bank SMS the live receiver never got (background delivery blocked by the system)")
+            c.settings.recordReceiverMiss(now, missed)
+        }
+        SpendWidget.refresh(applicationContext)
         return Result.success()
     }
 }

@@ -7,6 +7,7 @@ import com.krish.spendsense.data.SettingsStore
 import com.krish.spendsense.ingest.Ingestor
 import com.krish.spendsense.ingest.Notifier
 import com.krish.spendsense.ingest.SimDetector
+import com.krish.spendsense.widget.SpendWidget
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -29,5 +30,12 @@ class AppContainer(context: Context, databaseFactory: (Context) -> AppDatabase =
     val repository: Repository by lazy { Repository(database, settings::get) }
     val notifier = Notifier(app)
     val simDetector = SimDetector(app)
-    val ingestor: Ingestor by lazy { Ingestor(repository, settings, notifier, simDetector) }
+    /** Pipeline diagnostics (Settings -> About). Backfill is summarised once, not per message. */
+    fun log(event: String) {
+        if (!event.startsWith("backfill:") || event.startsWith("backfill: read")) PipelineLog.record(app, event)
+    }
+
+    val ingestor: Ingestor by lazy {
+        Ingestor(repository, settings, notifier, simDetector, log = ::log, onTodayChanged = { SpendWidget.refresh(app) })
+    }
 }

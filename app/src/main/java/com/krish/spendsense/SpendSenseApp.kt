@@ -1,6 +1,7 @@
 package com.krish.spendsense
 
 import android.app.Application
+import android.os.SystemClock
 import android.util.Log
 import com.krish.spendsense.ingest.Work
 import com.krish.spendsense.parse.ParseUtils
@@ -12,6 +13,7 @@ open class SpendSenseApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        startedAtElapsed = SystemClock.elapsedRealtime()
         CrashLog.install(this)
         container = createContainer()
         // Debug builds only, and never with message bodies.
@@ -25,4 +27,10 @@ open class SpendSenseApp : Application() {
     }
 
     protected open fun createContainer() = AppContainer(this)
+
+    companion object {
+        /** When this process started; lets the receiver log whether an SMS woke the app. */
+        @Volatile
+        var startedAtElapsed = 0L
+    }
 }

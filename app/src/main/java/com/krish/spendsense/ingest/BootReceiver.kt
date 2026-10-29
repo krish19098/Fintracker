@@ -4,6 +4,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import com.krish.spendsense.SpendSenseApp
+import com.krish.spendsense.widget.SpendWidget
 import kotlinx.coroutines.launch
 
 /** Reschedules work after boot / app update and checks for a swapped SIM. */
@@ -18,6 +19,7 @@ class BootReceiver : BroadcastReceiver() {
                 Work.scheduleAllSummaries(context, c.settings.get())
                 Work.scanNow(context)
                 if (c.repository.refreshSims(c.simDetector.current()).isNotEmpty()) c.notifier.simChanged(c.settings.get().moneySounds)
+                SpendWidget.refresh(context)
             } finally {
                 pending.finish()
             }

@@ -147,15 +147,27 @@ class Notifier(private val context: Context) {
         .setColor(0xFF0F766E.toInt())
         .setAutoCancel(true)
 
-    private fun post(id: Int, n: NotificationCompat.Builder) {
-        if (!nm.areNotificationsEnabled()) return
+    /** Why a notification was or wasn't shown, for the pipeline log. */
+    enum class PostResult(val label: String) {
+        POSTED("posted"),
+        NO_PERMISSION("NOT posted: notification permission denied"),
+        APP_BLOCKED("NOT posted: notifications turned off for SpendSense"),
+        CHANNEL_BLOCKED("NOT posted: this notification category is turned off"),
+        FAILED("NOT posted: system refused"),
+    }
+
+    private fun post(id: Int, n: NotificationCompat.Builder): PostResult {
         if (Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
-        ) return
-        try {
-            nm.notify(id, n.build())
+        ) return PostResult.NO_PERMISSION
+        if (!nm.areNotificationsEnabled()) return PostResult.APP_BLOCKED
+        val notification = n.build()
+        if (nm.getNotificationChannel(notification.channelId)?.importance == NotificationManager.IMPORTANCE_NONE) return PostResult.CHANNEL_BLOCKED
+        return try {
+            nm.notify(id, notification)
+            PostResult.POSTED
         } catch (_: SecurityException) {
-            // POST_NOTIFICATIONS revoked; Settings shows it in the permission checklist.
+            PostResult.FAILED
         }
     }
 
@@ -163,7 +175,7 @@ class Notifier(private val context: Context) {
      * "₹250 → Ravi Tea Stall · Today ₹1,840 / ₹2,000". Android shows at most 3 action buttons, so
      * the top 2 suggested categories and "Add note" are buttons; tapping opens the "Other…" sheet.
      */
-    fun postTxn(t: Txn, text: String, suggestions: List<Category>, pct: Int, sounds: Boolean, silent: Boolean = false) {
+    fun postTxn(t: Txn, text: String, suggestions: List<Category>, pct: Int, sounds: Boolean, silent: Boolean = false): PostResult {
         val id = txnNotifId(t.id)
         val b = spendBuilder(pct, sounds, text.substringBefore(" · "), text.substringAfter(" · ", ""))
             .setOnlyAlertOnce(true)
@@ -177,7 +189,7 @@ class Notifier(private val context: Context) {
             NotificationCompat.Action.Builder(0, "Add note", NotifActionReceiver.addNote(context, t.id))
                 .addRemoteInput(reply).setAllowGeneratedReplies(false).build(),
         )
-        post(id, b)
+        return post(id, b)
     }
 
     fun cancelTxn(txnId: Long) = nm.cancel(txnNotifId(txnId))
