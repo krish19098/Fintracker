@@ -64,6 +64,8 @@ import com.krish.spendsense.ui.Routes
 import com.krish.spendsense.ui.components.CategorySheet
 import com.krish.spendsense.ui.components.EmptyState
 import com.krish.spendsense.ui.components.LocalContainer
+import com.krish.spendsense.ui.components.pillChipColors
+import androidx.compose.foundation.shape.CircleShape
 import com.krish.spendsense.ui.components.ScreenScaffold
 import com.krish.spendsense.ui.components.TxnRow
 import com.krish.spendsense.ui.rememberRefData
@@ -236,7 +238,7 @@ private fun SwipeRow(t: Txn, ref: RefData, onSwipe: () -> Unit, onClick: () -> U
 fun <T> ChipMenu(label: String, active: Boolean, options: List<T>, display: (T) -> String, onSelect: (T) -> Unit) {
     var open by remember { mutableStateOf(false) }
     Box {
-        FilterChip(selected = active, onClick = { open = true }, label = { Text(label) })
+        FilterChip(selected = active, onClick = { open = true }, label = { Text(label) }, shape = CircleShape, colors = pillChipColors())
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             options.forEach { o -> DropdownMenuItem(text = { Text(display(o)) }, onClick = { onSelect(o); open = false }) }
         }

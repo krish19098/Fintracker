@@ -17,7 +17,6 @@ import androidx.lifecycle.lifecycleScope
 import com.krish.spendsense.ingest.Work
 import com.krish.spendsense.ui.AppRoot
 import com.krish.spendsense.ui.LaunchRequest
-import com.krish.spendsense.ui.theme.SpendSenseTheme
 import kotlinx.coroutines.launch
 
 /** Single activity. FragmentActivity is required by BiometricPrompt. */
@@ -36,9 +35,8 @@ class MainActivity : FragmentActivity() {
         if (savedInstanceState == null) launch.value = LaunchRequest.from(intent)
         val container = (application as SpendSenseApp).container
         setContent {
-            SpendSenseTheme {
-                AppRoot(container, locked.value, launch.value, onUnlock = ::authenticate, onLaunchHandled = { launch.value = null })
-            }
+            // AppRoot applies SpendSenseTheme itself: its colours follow today's spending.
+            AppRoot(container, locked.value, launch.value, onUnlock = ::authenticate, onLaunchHandled = { launch.value = null })
         }
     }
 

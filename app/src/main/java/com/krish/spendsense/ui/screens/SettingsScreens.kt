@@ -67,6 +67,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.krish.spendsense.BuildConfig
 import com.krish.spendsense.CrashLog
+import com.krish.spendsense.PipelineLog
 import com.krish.spendsense.data.Backup
 import com.krish.spendsense.data.Category
 import com.krish.spendsense.data.CategoryKind
@@ -427,6 +428,19 @@ fun PermissionChecklist(showXiaomi: Boolean) {
     HealthRow("Read bank SMS", smsOk, "Needed to capture payments from your bank SMS on both SIMs") {
         request.launch(Perms.SMS)
     }
+    // Evidence from the inbox scanner: bank SMS it caught that the live receiver never got.
+    val recentMiss = s.receiverMissCount > 0 && System.currentTimeMillis() - s.receiverMissAt < 7L * 24 * 3600_000
+    if (smsOk) HealthRow(
+        "Instant SMS alerts", !recentMiss,
+        if (recentMiss) {
+            "${s.receiverMissCount} bank SMS in the last 7 days only reached SpendSense when it was opened or scanned later " +
+                "(last ${Dates.day(s.receiverMissAt)} ${Dates.time(s.receiverMissAt)}). The system is blocking background delivery: " +
+                "turn Autostart on and set Battery saver to No restrictions below."
+        } else {
+            "Bank SMS are being received in the background"
+        },
+        "Fix",
+    ) { Perms.openAutostart(ctx) }
     HealthRow("Tell SIMs apart", phoneOk, "Lets us know which SIM an SMS arrived on") { request.launch(arrayOf(Perms.PHONE)) }
     HealthRow(
         "Notification access", listener,
@@ -535,6 +549,7 @@ fun AboutScreen(nav: NavController) {
     val ctx = LocalContext.current
     val clipboard = LocalClipboardManager.current
     var crashLog by remember { mutableStateOf(CrashLog.read(ctx)) }
+    var pipelineLog by remember { mutableStateOf(PipelineLog.read(ctx)) }
     ScreenScaffold("About", onBack = { nav.popBackStack() }) { padding ->
         Column(Modifier.padding(padding).padding(16.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("SpendSense ${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.titleLarge)
@@ -555,6 +570,21 @@ fun AboutScreen(nav: NavController) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(onClick = { clipboard.setText(AnnotatedString(crash)) }) { Text("Copy") }
                     OutlinedButton(onClick = { CrashLog.clear(ctx); crashLog = null }) { Text("Clear") }
+                }
+            }
+            SectionTitle("Background activity", Modifier.padding(start = 0.dp))
+            Text(
+                "What happened to recent bank SMS: received, saved, limit checks and whether each alert was shown. No message text or account numbers are kept.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            val trail = pipelineLog
+            if (trail == null) {
+                Text("Nothing recorded yet.", style = MaterialTheme.typography.bodySmall)
+            } else {
+                Text(trail, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = { clipboard.setText(AnnotatedString(trail)) }) { Text("Copy") }
+                    OutlinedButton(onClick = { PipelineLog.clear(ctx); pipelineLog = null }) { Text("Clear") }
                 }
             }
         }

@@ -26,7 +26,6 @@ import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material3.DateRangePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
@@ -59,12 +58,14 @@ import com.krish.spendsense.domain.Recurring
 import com.krish.spendsense.domain.TimeBand
 import com.krish.spendsense.domain.Totals
 import com.krish.spendsense.parse.ParseUtils
+import com.krish.spendsense.ui.LocalToday
 import com.krish.spendsense.ui.RefData
 import com.krish.spendsense.ui.Routes
 import com.krish.spendsense.ui.components.DonutChart
 import com.krish.spendsense.ui.components.EmptyState
 import com.krish.spendsense.ui.components.InfoCard
 import com.krish.spendsense.ui.components.LocalContainer
+import com.krish.spendsense.ui.components.PillChip
 import com.krish.spendsense.ui.components.ScreenScaffold
 import com.krish.spendsense.ui.components.SectionTitle
 import com.krish.spendsense.ui.components.colorOf
@@ -100,7 +101,7 @@ fun InsightsScreen(nav: NavController) {
     val c = LocalContainer.current
     val ref = rememberRefData()
     val scope = rememberCoroutineScope()
-    val today = LocalDate.now(ParseUtils.IST)
+    val today = LocalToday.current
     var period by rememberSaveable { mutableStateOf(Period.MONTH) }
     var customFrom by rememberSaveable { mutableStateOf(today.minusDays(29).toEpochDay()) }
     var customTo by rememberSaveable { mutableStateOf(today.toEpochDay()) }
@@ -143,8 +144,8 @@ fun InsightsScreen(nav: NavController) {
             }
             if (ref.accounts.isNotEmpty()) item {
                 LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    item { FilterChip(accountId == null, { accountId = null }, label = { Text("All accounts") }) }
-                    items(ref.accounts, key = { it.id }) { a -> FilterChip(accountId == a.id, { accountId = a.id }, label = { Text(a.label) }) }
+                    item { PillChip(accountId == null, { accountId = null }, "All accounts") }
+                    items(ref.accounts, key = { it.id }) { a -> PillChip(accountId == a.id, { accountId = a.id }, a.label) }
                 }
             }
             if (all.isEmpty()) {

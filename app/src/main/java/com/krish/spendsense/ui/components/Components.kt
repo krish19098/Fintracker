@@ -61,6 +61,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TimePicker
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -140,22 +141,36 @@ fun ScreenScaffold(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                title = { Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.headlineSmall) },
                 navigationIcon = {
-                    if (onBack != null) IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
+                    if (onBack != null) {
+                        Surface(
+                            onClick = onBack, shape = MaterialTheme.shapes.small, color = MaterialTheme.colorScheme.surface, shadowElevation = 2.dp,
+                            modifier = Modifier.padding(start = 12.dp, end = 4.dp).size(48.dp),
+                        ) {
+                            Box(contentAlignment = Alignment.Center) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
+                        }
+                    }
                 },
                 actions = { actions() },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    scrolledContainerColor = MaterialTheme.colorScheme.background,
+                ),
             )
         },
         floatingActionButton = fab,
+        containerColor = MaterialTheme.colorScheme.background,
         content = content,
     )
 }
 
 /** Circular progress ring; [fraction] may exceed 1 (drawn full). */
 @Composable
-fun ProgressRing(fraction: Float, color: Color, modifier: Modifier = Modifier, stroke: Dp = 14.dp, content: @Composable () -> Unit) {
-    val track = MaterialTheme.colorScheme.surfaceVariant
+fun ProgressRing(
+    fraction: Float, color: Color, modifier: Modifier = Modifier, stroke: Dp = 14.dp,
+    track: Color = MaterialTheme.colorScheme.surfaceVariant, content: @Composable () -> Unit,
+) {
     Box(modifier, contentAlignment = Alignment.Center) {
         Canvas(Modifier.fillMaxSize()) {
             val w = stroke.toPx()
@@ -197,7 +212,7 @@ fun DonutChart(slices: List<Pair<Color, Long>>, modifier: Modifier = Modifier, c
 fun CategoryAvatar(category: Category?, size: Dp = 40.dp) {
     val c = category?.let { colorOf(it.color) } ?: MaterialTheme.colorScheme.outline
     Box(
-        Modifier.size(size).clip(CircleShape).background(c.copy(alpha = 0.18f)),
+        Modifier.size(size).clip(RoundedCornerShape(size * 0.32f)).background(c.copy(alpha = 0.16f)),
         contentAlignment = Alignment.Center,
     ) {
         Icon(iconFor(category?.icon), contentDescription = category?.name ?: "Uncategorised", tint = c, modifier = Modifier.size(size * 0.55f))
@@ -269,7 +284,9 @@ fun excludedLabel(reason: String) = when (reason) {
 @Composable
 fun EmptyState(icon: ImageVector, title: String, text: String, actionLabel: String? = null, onAction: (() -> Unit)? = null) {
     Column(Modifier.fillMaxWidth().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(48.dp))
+        Box(Modifier.size(80.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer), contentAlignment = Alignment.Center) {
+            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(40.dp))
+        }
         Spacer(Modifier.size(12.dp))
         Text(title, style = MaterialTheme.typography.titleMedium)
         Spacer(Modifier.size(4.dp))
@@ -289,7 +306,7 @@ fun MissingScreen(title: String, text: String, onBack: () -> Unit) = ScreenScaff
 
 @Composable
 fun SectionTitle(text: String, modifier: Modifier = Modifier) =
-    Text(text, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, modifier = modifier.padding(start = 16.dp, top = 20.dp, bottom = 6.dp))
+    Text(text, style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onBackground, modifier = modifier.padding(start = 16.dp, top = 20.dp, bottom = 6.dp))
 
 @Composable
 fun SettingRow(title: String, subtitle: String? = null, icon: ImageVector? = null, onClick: (() -> Unit)? = null, trailing: @Composable () -> Unit = {}) {
@@ -298,15 +315,17 @@ fun SettingRow(title: String, subtitle: String? = null, icon: ImageVector? = nul
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (icon != null) {
-            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-            Spacer(Modifier.width(16.dp))
+            Box(Modifier.size(44.dp).clip(MaterialTheme.shapes.small).background(MaterialTheme.colorScheme.primaryContainer), contentAlignment = Alignment.Center) {
+                Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
+            }
+            Spacer(Modifier.width(14.dp))
         }
         Column(Modifier.weight(1f)) {
             Text(title, style = MaterialTheme.typography.bodyLarge)
             if (subtitle != null) Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         trailing()
-        if (onClick != null && icon != null) Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null)
+        if (onClick != null && icon != null) Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -417,10 +436,37 @@ fun <T> Dropdown(label: String, options: List<T>, selected: T, display: (T) -> S
 
 @Composable
 fun InfoCard(modifier: Modifier = Modifier, onClick: (() -> Unit)? = null, content: @Composable () -> Unit) {
+    // White rounded card with a soft shadow on the mint background.
     val m = modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)
+    val colors = androidx.compose.material3.CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface)
+    val elevation = androidx.compose.material3.CardDefaults.elevatedCardElevation(defaultElevation = 2.dp)
     if (onClick != null) {
-        androidx.compose.material3.ElevatedCard(onClick = onClick, modifier = m) { Column(Modifier.padding(16.dp)) { content() } }
+        androidx.compose.material3.ElevatedCard(onClick = onClick, modifier = m, shape = MaterialTheme.shapes.medium, colors = colors, elevation = elevation) {
+            Column(Modifier.padding(18.dp)) { content() }
+        }
     } else {
-        androidx.compose.material3.ElevatedCard(modifier = m) { Column(Modifier.padding(16.dp)) { content() } }
+        androidx.compose.material3.ElevatedCard(modifier = m, shape = MaterialTheme.shapes.medium, colors = colors, elevation = elevation) {
+            Column(Modifier.padding(18.dp)) { content() }
+        }
     }
 }
+
+/** Rounded pill filter chip: dark primary when selected, as in the design reference. */
+@Composable
+fun PillChip(selected: Boolean, onClick: () -> Unit, label: String) = androidx.compose.material3.FilterChip(
+    selected = selected, onClick = onClick, label = { Text(label) }, shape = CircleShape,
+    colors = pillChipColors(),
+    border = androidx.compose.material3.FilterChipDefaults.filterChipBorder(
+        enabled = true, selected = selected,
+        borderColor = MaterialTheme.colorScheme.outline, selectedBorderColor = MaterialTheme.colorScheme.primary,
+    ),
+    modifier = Modifier.heightIn(min = 40.dp),
+)
+
+@Composable
+fun pillChipColors() = androidx.compose.material3.FilterChipDefaults.filterChipColors(
+    containerColor = MaterialTheme.colorScheme.surface,
+    selectedContainerColor = MaterialTheme.colorScheme.primary,
+    selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
+    selectedLeadingIconColor = MaterialTheme.colorScheme.onPrimary,
+)

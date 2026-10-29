@@ -18,7 +18,6 @@ import androidx.compose.material.icons.filled.Inbox
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -40,10 +39,23 @@ import androidx.navigation.NavController
 import com.krish.spendsense.domain.Dates
 import com.krish.spendsense.domain.InsightsEngine
 import com.krish.spendsense.domain.Money
-import com.krish.spendsense.domain.Totals
 import com.krish.spendsense.ingest.Backfill
-import com.krish.spendsense.parse.ParseUtils
+import com.krish.spendsense.ui.LocalToday
 import com.krish.spendsense.ui.MoodCoin
+import com.krish.spendsense.ui.SpendPalettes
+import com.krish.spendsense.ui.navigateTab
+import com.krish.spendsense.ui.components.PillChip
+import com.krish.spendsense.domain.SpendState
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import com.krish.spendsense.ui.Perms
 import com.krish.spendsense.ui.SpendStyle
 import com.krish.spendsense.ui.Routes
@@ -57,9 +69,6 @@ import com.krish.spendsense.ui.components.TxnRow
 import com.krish.spendsense.ui.rememberRefData
 import com.krish.spendsense.ui.theme.AmountLarge
 import com.krish.spendsense.ui.theme.Bad
-import com.krish.spendsense.ui.theme.Good
-import com.krish.spendsense.ui.theme.Warn
-import java.time.LocalDate
 import java.time.YearMonth
 
 @Composable
@@ -67,7 +76,7 @@ fun HomeScreen(nav: NavController) {
     val c = LocalContainer.current
     val ctx = LocalContext.current
     val ref = rememberRefData()
-    val today = LocalDate.now(ParseUtils.IST)
+    val today = LocalToday.current
     val month = YearMonth.from(today)
     val monthRows by remember(month, today) { c.repository.observeRange(Dates.startOf(month.atDay(1)), Dates.endOf(today)) }
         .collectAsStateWithLifecycle(emptyList())
@@ -84,15 +93,9 @@ fun HomeScreen(nav: NavController) {
     val account = accountId?.let { ref.accountById[it] }
     val rows = if (accountId == null) monthRows else monthRows.filter { it.accountId == accountId }
     val excluded = if (accountId == null) ref.excludedAccounts else emptySet()
-    val todayRows = rows.filter { Dates.date(it.timestamp) == today }
-    val spentToday = Totals.spend(todayRows, excluded)
+    // Same calculation as the app theme and widget; an account chip uses that account's own limit if set.
     val limit = account?.dailyLimitPaise ?: ref.settings.dailyLimitPaise
-    val fraction = if (limit > 0) spentToday.toFloat() / limit else 0f
-    val ringColor = when {
-        fraction >= 1f -> Bad
-        fraction * 100 >= ref.settings.warnPct -> Warn
-        else -> Good
-    }
+    val state = SpendState.of(rows, today, limit, ref.settings.warnPct, excluded)
     val forecast = InsightsEngine(ref.categories, excluded).forecast(rows, today, ref.settings.monthlyBudget(month))
     val reviewCount = review.size + unparsed.size
 
@@ -100,7 +103,8 @@ fun HomeScreen(nav: NavController) {
         LazyColumn(Modifier.padding(padding)) {
             if (!permsOk) item {
                 Row(
-                    Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.errorContainer).clickable { nav.navigate(Routes.PERMISSIONS) }.padding(16.dp),
+                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).clip(MaterialTheme.shapes.medium)
+                        .background(MaterialTheme.colorScheme.errorContainer).clickable { nav.navigate(Routes.PERMISSIONS) }.padding(16.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Icon(Icons.Filled.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error)
@@ -117,23 +121,12 @@ fun HomeScreen(nav: NavController) {
                     }
                 }
             }
+            item { TodayHero(state) }
             if (ref.accounts.isNotEmpty()) item {
-                LazyRow(contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    item { FilterChip(selected = accountId == null, onClick = { accountId = null }, label = { Text("All") }) }
+                LazyRow(contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    item { PillChip(selected = accountId == null, onClick = { accountId = null }, label = "All") }
                     items(ref.accounts, key = { it.id }) { a ->
-                        FilterChip(selected = accountId == a.id, onClick = { accountId = a.id }, label = { Text(a.label) })
-                    }
-                }
-            }
-            item {
-                Column(Modifier.fillMaxWidth().padding(vertical = 16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    ProgressRing(fraction, ringColor, Modifier.size(220.dp)) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            MoodCoin(SpendStyle.mood(SpendStyle.percent(spentToday, limit)), 56.dp)
-                            Text("Today", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text(Money.short(spentToday), style = AmountLarge)
-                            Text("of ${Money.short(limit)}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
+                        PillChip(selected = accountId == a.id, onClick = { accountId = a.id }, label = a.label)
                     }
                 }
             }
@@ -156,7 +149,12 @@ fun HomeScreen(nav: NavController) {
                     )
                 }
             }
-            item { SectionTitle("Recent") }
+            item {
+                Row(Modifier.fillMaxWidth().padding(end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    SectionTitle("Recent", Modifier.weight(1f))
+                    TextButton(onClick = { nav.navigateTab(Routes.TXNS) }, modifier = Modifier.padding(top = 12.dp)) { Text("View all") }
+                }
+            }
             val recent = rows.sortedByDescending { it.timestamp }.take(5)
             if (recent.isEmpty()) item {
                 EmptyState(
@@ -169,6 +167,41 @@ fun HomeScreen(nav: NavController) {
                 TxnRow(t, t.categoryId?.let { ref.categoryById[it] }, t.accountId?.let { ref.accountById[it] }) { nav.navigate(Routes.txn(t.id)) }
             }
             item { Spacer(Modifier.size(24.dp)) }
+        }
+    }
+}
+
+/**
+ * Today's hero card (emerald gradient in the healthy band, warming to amber / red with spending):
+ * amount, limit, status and the progress ring with the mood coin.
+ */
+@Composable
+private fun TodayHero(state: SpendState) {
+    val p = SpendPalettes.of(state.band, isSystemInDarkTheme())
+    val start by animateColorAsState(Color(p.heroStart), tween(600), label = "heroStart")
+    val end by animateColorAsState(Color(p.heroEnd), tween(600), label = "heroEnd")
+    Box(
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).shadow(6.dp, MaterialTheme.shapes.large)
+            .clip(MaterialTheme.shapes.large).background(Brush.linearGradient(listOf(start, end))).padding(20.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Today", style = MaterialTheme.typography.titleMedium, color = Color.White)
+                Text(Money.short(state.spentPaise), style = AmountLarge, color = Color.White)
+                Text(
+                    if (state.hasLimit) "of ${Money.short(state.limitPaise)} · ${state.percent}%" else "No daily limit",
+                    style = MaterialTheme.typography.bodyMedium, color = Color.White,
+                )
+                Spacer(Modifier.size(12.dp))
+                Text(
+                    SpendPalettes.status(state),
+                    style = MaterialTheme.typography.labelLarge, color = Color.White,
+                    modifier = Modifier.clip(CircleShape).background(Color.White.copy(alpha = 0.18f)).padding(horizontal = 12.dp, vertical = 6.dp),
+                )
+            }
+            ProgressRing(state.fraction, Color.White, Modifier.size(132.dp), stroke = 12.dp, track = Color.White.copy(alpha = 0.25f)) {
+                MoodCoin(SpendStyle.mood(state.percent), 68.dp)
+            }
         }
     }
 }

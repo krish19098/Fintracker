@@ -48,6 +48,23 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.krish.spendsense.AppContainer
+import com.krish.spendsense.domain.Dates
+import com.krish.spendsense.domain.SpendBand
+import com.krish.spendsense.domain.SpendState
+import com.krish.spendsense.parse.ParseUtils
+import com.krish.spendsense.ui.theme.LocalSpendColors
+import com.krish.spendsense.ui.theme.SpendSenseTheme
+import com.krish.spendsense.widget.SpendWidget
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.compose.LifecycleResumeEffect
+import kotlinx.coroutines.delay
+import java.time.Duration
+import java.time.LocalDate
+import java.time.ZonedDateTime
 import com.krish.spendsense.data.SimChange
 import com.krish.spendsense.ingest.Notifier
 import com.krish.spendsense.ui.components.LocalContainer
@@ -71,6 +88,9 @@ import com.krish.spendsense.ui.screens.SubscriptionsScreen
 import com.krish.spendsense.ui.screens.TransactionsScreen
 import com.krish.spendsense.ui.screens.TxnDetailScreen
 import kotlinx.coroutines.launch
+
+/** Today's IST date, updated at midnight (see [rememberToday]). */
+val LocalToday = staticCompositionLocalOf { LocalDate.now(ParseUtils.IST) }
 
 /** What a notification asked the app to open. */
 data class LaunchRequest(val txnId: Long?, val categorySheet: Boolean, val open: String?) {
@@ -117,18 +137,48 @@ private val tabs = listOf(
 
 @Composable
 fun AppRoot(container: AppContainer, locked: Boolean, launch: LaunchRequest?, onUnlock: () -> Unit, onLaunchHandled: () -> Unit) {
-    CompositionLocalProvider(LocalContainer provides container) {
-        val settings by remember { container.settings.flow }.collectAsStateWithLifecycle(null)
-        val s = settings
-        Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-            when {
-                s == null -> Unit
-                locked -> LockScreen(onUnlock)
-                !s.onboardingDone -> OnboardingScreen()
-                else -> MainNav(launch, onLaunchHandled)
+    val context = LocalContext.current
+    val settings by remember { container.settings.flow }.collectAsStateWithLifecycle(null)
+    val s = settings
+    val today = rememberToday()
+    // Today's overall spending state (same inputs as Home "All" and the widget) drives the theme.
+    val todayRows by remember(today) { container.repository.observeRange(Dates.startOf(today), Dates.endOf(today)) }
+        .collectAsStateWithLifecycle(emptyList())
+    val accounts by remember { container.repository.observeAccounts() }.collectAsStateWithLifecycle(emptyList())
+    val state = s?.let {
+        SpendState.of(todayRows, today, it.dailyLimitPaise, it.warnPct, accounts.filterNot { a -> a.includeInTotals }.map { a -> a.id }.toSet())
+    }
+    // Edits, deletions, recategorising and limit changes made in the app reach the widget here.
+    LaunchedEffect(state) { if (state != null) SpendWidget.refresh(context) }
+    CompositionLocalProvider(LocalContainer provides container, LocalToday provides today) {
+        SpendSenseTheme(band = state?.band ?: SpendBand.HEALTHY) {
+            Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                when {
+                    s == null -> Unit
+                    locked -> LockScreen(onUnlock)
+                    !s.onboardingDone -> OnboardingScreen()
+                    else -> MainNav(launch, onLaunchHandled)
+                }
             }
         }
     }
+}
+
+/** Today's IST date; ticks over at midnight and is re-read whenever the app resumes. */
+@Composable
+fun rememberToday(): LocalDate {
+    var today by remember { mutableStateOf(LocalDate.now(ParseUtils.IST)) }
+    LaunchedEffect(today) {
+        val now = ZonedDateTime.now(ParseUtils.IST)
+        val next = now.toLocalDate().plusDays(1).atStartOfDay(ParseUtils.IST)
+        delay(Duration.between(now, next).toMillis() + 1_000)
+        today = LocalDate.now(ParseUtils.IST)
+    }
+    LifecycleResumeEffect(Unit) {
+        today = LocalDate.now(ParseUtils.IST)
+        onPauseOrDispose {}
+    }
+    return today
 }
 
 @Composable
@@ -167,13 +217,25 @@ private fun MainNav(launch: LaunchRequest?, onLaunchHandled: () -> Unit) {
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
             if (tabs.any { it.route == route }) {
-                NavigationBar {
+                // Dark rounded bar with a mint (band-coloured) selected state, as in the design reference.
+                val sc = LocalSpendColors.current
+                NavigationBar(
+                    containerColor = sc.navBar,
+                    modifier = Modifier.clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)),
+                ) {
                     tabs.forEach { t ->
                         NavigationBarItem(
                             selected = route == t.route,
                             onClick = { nav.navigateTab(t.route) },
                             icon = { Icon(t.icon, contentDescription = t.label) },
                             label = { Text(t.label) },
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedIconColor = sc.navBar,
+                                selectedTextColor = sc.accent,
+                                indicatorColor = sc.accent,
+                                unselectedIconColor = sc.onNavBar,
+                                unselectedTextColor = sc.onNavBar,
+                            ),
                         )
                     }
                 }
