@@ -54,7 +54,13 @@ COIN = [
     ("fill", GOLD_LIGHT, "M16,18 Q22,9 33,8.5 Q22,12 18.5,21 Z"),  # shine
 ]
 
+# Big centred white ₹ for the widget / identity coin, with a darker gold shadow so it stays legible.
+RUPEE_BIG = "M24,19 L40,19 M24,25 L40,25 M26.5,19 C36.5,19 36.5,31 26.5,31 L25,31 L38.5,44.5"
+INNER_RING = "M32,11 a21,21 0 1,0 0.01,0 Z"
+
 def shapes(mood):
+    if mood == "rupee":
+        return COIN[:2] + [("stroke-ring", GOLD_DARK, INNER_RING), ("stroke-shadow", GOLD_DARK, RUPEE_BIG), ("stroke-white", "#FFFFFF", RUPEE_BIG)]
     rupee = [("stroke-thin", GOLD_DARK, RUPEE)]
     return COIN + rupee + MOODS[mood]
 
@@ -67,7 +73,7 @@ def vector(mood):
         if kind == "fill":
             out.append(f'    <path android:fillColor="{color}" android:pathData="{d}" />')
         else:
-            w = "1.6" if kind == "stroke-thin" else "2.2"
+            w = {"stroke-thin": "1.6", "stroke-ring": "1.0", "stroke-shadow": "5.2", "stroke-white": "3.4"}.get(kind, "2.2")
             out.append(f'    <path android:fillColor="#00000000" android:strokeColor="{color}" android:strokeWidth="{w}" '
                        f'android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="{d}" />')
     out.append("</vector>")
@@ -79,16 +85,16 @@ def svg(mood):
         if kind == "fill":
             parts.append(f'<path fill="{color}" d="{d}"/>')
         else:
-            w = "1.6" if kind == "stroke-thin" else "2.2"
+            w = {"stroke-thin": "1.6", "stroke-ring": "1.0", "stroke-shadow": "5.2", "stroke-white": "3.4"}.get(kind, "2.2")
             parts.append(f'<path fill="none" stroke="{color}" stroke-width="{w}" stroke-linecap="round" stroke-linejoin="round" d="{d}"/>')
     return f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="192" height="192">{"".join(parts)}</svg>'
 
 if __name__ == "__main__":
     root = os.path.join(os.path.dirname(__file__), "..", "app", "src", "main", "res", "drawable")
-    for m in MOODS:
+    for m in list(MOODS) + ["rupee"]:
         with open(os.path.join(root, f"coin_{m}.xml"), "w") as f:
             f.write(vector(m))
     if len(sys.argv) > 1:
         with open(os.path.join(sys.argv[1], "mascot.html"), "w") as f:
             f.write("<html><body style='margin:0;background:#eee'>" + "".join(
-                f"<div style='display:inline-block;margin:8px;text-align:center;font:14px sans-serif'>{svg(m)}<br>{m}</div>" for m in MOODS) + "</body></html>")
+                f"<div style='display:inline-block;margin:8px;text-align:center;font:14px sans-serif'>{svg(m)}<br>{m}</div>" for m in list(MOODS) + ["rupee"]) + "</body></html>")

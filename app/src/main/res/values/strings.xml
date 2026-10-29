@@ -1,4 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">SpendSense</string>
+    <string name="widget_description">Today\'s spending against your daily limit</string>
+    <string name="widget_coin_description">SpendSense gold coin</string>
+    <string name="widget_today">Today</string>
+    <string name="widget_loading">Updating…</string>
 </resources>

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Widget background, approaching band: same hero gradient as the app (SpendPalettes). -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <corners android:radius="24dp" />
+    <gradient android:angle="315" android:startColor="#FF33500E" android:endColor="#FF6A5207" android:type="linear" />
+</shape>
