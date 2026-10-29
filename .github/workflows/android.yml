@@ -54,11 +54,11 @@ jobs:
           python3 - <<'PY'
           import base64, glob, io, os
           from PIL import Image
-          files = sorted(glob.glob("app/build/outputs/roborazzi/notif_*.png"))
+          files = sorted(glob.glob("app/build/outputs/roborazzi/design_*.png"))
           if not files:
               raise SystemExit("no screenshots")
           imgs = [Image.open(f).convert("RGB") for f in files]
-          w = min(360, max(i.width for i in imgs))
+          w = 270
           thumbs = [i.resize((w, max(1, i.height * w // i.width))) for i in imgs]
           cols = 4
           rows = [thumbs[k:k + cols] for k in range(0, len(thumbs), cols)]
