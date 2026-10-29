@@ -19,6 +19,8 @@ import com.krish.spendsense.ingest.Notifier
 import com.krish.spendsense.parse.ParseUtils
 import com.krish.spendsense.ui.SpendPalettes
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.time.LocalDate
 
 /** Home-screen widget: today's spend vs the daily limit, coloured by the same [SpendState] as the app. */
@@ -60,12 +62,15 @@ object SpendWidget {
         return SpendState.of(c.repository.dayTxns(today), today, s.dailyLimitPaise, s.warnPct, c.repository.excludedAccountIds())
     }
 
+    /** Refreshes run one at a time, so one that read older data can't overwrite a newer one. */
+    private val lock = Mutex()
+
     /** Re-renders every placed widget. Cheap no-op when none is placed. */
-    suspend fun refresh(context: Context) {
+    suspend fun refresh(context: Context) = lock.withLock {
         val app = context.applicationContext
-        val mgr = AppWidgetManager.getInstance(app) ?: return
+        val mgr = AppWidgetManager.getInstance(app) ?: return@withLock
         val ids = mgr.getAppWidgetIds(ComponentName(app, SpendWidgetReceiver::class.java))
-        if (ids == null || ids.isEmpty()) return
+        if (ids == null || ids.isEmpty()) return@withLock
         mgr.updateAppWidget(ids, render(app, currentState(app)))
         scheduleMidnight(app)
     }

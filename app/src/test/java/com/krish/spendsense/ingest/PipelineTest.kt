@@ -174,6 +174,9 @@ class PipelineTest {
         val shadowMgr = shadowOf(AppWidgetManager.getInstance(app))
         val id = shadowMgr.createWidget(SpendWidgetReceiver::class.java, R.layout.widget_spend)
         ingest(600) // 60% of ₹1,000 -> approaching
+        // Placing the widget also queued its own background refresh; refreshes are serialised, so a
+        // final one here must still show the newest state.
+        runBlocking { SpendWidget.refresh(app) }
         var view = shadowMgr.getViewFor(id)
         assertEquals("₹600", view.findViewById<TextView>(R.id.widget_amount).text.toString())
         assertEquals("of ₹1,000 · 60% used", view.findViewById<TextView>(R.id.widget_detail).text.toString())
