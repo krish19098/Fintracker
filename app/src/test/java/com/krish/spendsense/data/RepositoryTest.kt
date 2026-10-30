@@ -291,4 +291,23 @@ class RepositoryTest {
         repo.restore(restored)
         assertEquals(snap, repo.snapshot())
     }
+    @Test
+    fun alwaysPropagationAndPayeeRulesDoNotInflateTrainingLabels() = runBlocking {
+        val food = db.categoryDao().bySystemKey(CatKeys.FOOD)!!.id
+        val at = TestData.at(TestData.TODAY)
+        val ids = (1..3).map { repo.addManual(1_000L * it, Direction.DEBIT, "Lakshmi Corner", null, null, at + it, null) }
+        assertEquals(3, repo.trainingDataStats().needsReview)
+        repo.setCategory(ids[0], food, always = true)
+        // A later row is categorised by the learned PayeeRule, not by the user.
+        repo.addManual(4_000, Direction.DEBIT, "LAKSHMI CORNER", null, null, at + 4, null)
+
+        assertTrue(all().all { it.categoryId == food })
+        val s = repo.trainingDataStats()
+        assertEquals(4, s.spendTxns)
+        assertEquals(1, s.labels)
+        assertEquals(1, s.labelPayees)
+        assertEquals(1, s.perCategory.single().labels)
+        assertEquals(0, s.needsReview)
+        assertEquals(0, s.uncategorised)
+    }
 }

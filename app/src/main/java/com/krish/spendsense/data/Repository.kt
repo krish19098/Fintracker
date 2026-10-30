@@ -6,6 +6,7 @@ import com.krish.spendsense.domain.Categorizer
 import com.krish.spendsense.domain.Dates
 import com.krish.spendsense.domain.DefaultCategories
 import com.krish.spendsense.domain.Exclusions
+import com.krish.spendsense.domain.TrainingDataStats
 import com.krish.spendsense.parse.Direction
 import com.krish.spendsense.parse.IncomeKind
 import com.krish.spendsense.parse.MessageFilter
@@ -252,6 +253,9 @@ class Repository(
         val fallback = listOf(CatKeys.FOOD, CatKeys.GROCERIES, CatKeys.TRANSPORT, CatKeys.SHOPPING).mapNotNull { k -> all.values.firstOrNull { it.systemKey == k } }
         return (top + fallback).distinctBy { it.id }.take(n)
     }
+
+    /** ML milestone M0: aggregate label counts for Settings → About. Read-only. */
+    suspend fun trainingDataStats(): TrainingDataStats = TrainingDataStats.of(txns.all(), categories.all())
 
     // ---- Review inbox ----
     suspend fun dismissUnparsed(id: Long) = unparsed.delete(id)

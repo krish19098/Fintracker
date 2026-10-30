@@ -13,7 +13,10 @@ import com.krish.spendsense.MainActivity
 import com.krish.spendsense.domain.TestData
 import com.krish.spendsense.ingest.Notifier
 import com.krish.spendsense.parse.Direction
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -135,5 +138,30 @@ class AppUiTest {
             waitForText("Today")
             compose.onNodeWithText("This transaction no longer exists.").assertDoesNotExist()
         }
+    }
+    @Test
+    fun aboutShowsTrainingDataCountsWithoutPersonalDetails() {
+        prepare(30)
+        runBlocking {
+            val shopping = repo.observeCategories().first()
+                .first { it.systemKey == com.krish.spendsense.domain.CatKeys.SHOPPING }.id
+            val at = TestData.at(LocalDate.now(com.krish.spendsense.parse.ParseUtils.IST))
+            repo.addManual(12_345, Direction.DEBIT, "Ravi Tea Stall", shopping, null, at, "birthday gift")
+            repo.addManual(67_890, Direction.DEBIT, "Swiggy", shopping, null, at + 1, null)
+        }
+        ActivityScenario.launch(MainActivity::class.java).use {
+            click("Settings")
+            click("About")
+            waitForText("Categorisation data")
+            waitForText("Transactions: 32 · spending: 29")
+            waitForText("Corrected by you: 2 spending · 2 payees")
+            waitForText("Shopping: 2 labels · 2 payees")
+            waitForText("Not enough corrected data yet: needs 30 corrected spending transactions (have 2) and 3 categories with 5+ each (have 0).")
+            for (secret in listOf("Ravi", "Swiggy", "Zomato", "Netflix", "Amazon", "birthday", "123.45", "678.90", "9924", "6578")) {
+                assertTrue(secret, compose.onAllNodes(hasText(secret, substring = true)).fetchSemanticsNodes().isEmpty())
+            }
+        }
+        val log = com.krish.spendsense.PipelineLog.read(app).orEmpty()
+        assertFalse(log, "Ravi" in log || "Swiggy" in log)
     }
 }

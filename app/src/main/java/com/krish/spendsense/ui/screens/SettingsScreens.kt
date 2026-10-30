@@ -49,6 +49,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -74,6 +75,7 @@ import com.krish.spendsense.data.CategoryKind
 import com.krish.spendsense.domain.CatKeys
 import com.krish.spendsense.domain.Dates
 import com.krish.spendsense.domain.Money
+import com.krish.spendsense.domain.TrainingDataStats
 import com.krish.spendsense.ingest.Backfill
 import com.krish.spendsense.ingest.Work
 import com.krish.spendsense.parse.IncomeKind
@@ -587,6 +589,34 @@ fun AboutScreen(nav: NavController) {
                     OutlinedButton(onClick = { PipelineLog.clear(ctx); pipelineLog = null }) { Text("Clear") }
                 }
             }
+            TrainingDataSection()
         }
     }
+}
+
+/** ML milestone M0: aggregate counts only, never payee names, VPAs or amounts. */
+@Composable
+private fun TrainingDataSection() {
+    val c = LocalContainer.current
+    val stats by produceState<TrainingDataStats?>(null) { value = c.repository.trainingDataStats() }
+    SectionTitle("Categorisation data", Modifier.padding(start = 0.dp))
+    Text(
+        "How many categories you have set yourself, for future on-device learning. Counts only; nothing leaves this phone.",
+        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    val s = stats ?: return
+    Text("Transactions: ${s.totalTxns} · spending: ${s.spendTxns}", style = MaterialTheme.typography.bodySmall)
+    Text("Corrected by you: ${s.labels} spending · ${s.labelPayees} payees", style = MaterialTheme.typography.bodySmall)
+    Text("Uncategorised: ${s.uncategorised} · needs review: ${s.needsReview} (${s.reviewRatePct}% of all)", style = MaterialTheme.typography.bodySmall)
+    s.perCategory.forEach { Text("${it.name}: ${it.labels} labels · ${it.distinctPayees} payees", style = MaterialTheme.typography.bodySmall) }
+    Text(
+        if (s.ready) {
+            "Enough corrected data to start ML experiments."
+        } else {
+            "Not enough corrected data yet: needs ${TrainingDataStats.MIN_LABELS} corrected spending transactions (have ${s.labels}) " +
+                "and ${TrainingDataStats.MIN_CATEGORIES} categories with ${TrainingDataStats.MIN_LABELS_PER_CATEGORY}+ each (have ${s.categoriesWithEnoughLabels})."
+        },
+        style = MaterialTheme.typography.bodySmall, color = if (s.ready) Good else MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    Text("Early engineering thresholds, not a measure of accuracy.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
 }
