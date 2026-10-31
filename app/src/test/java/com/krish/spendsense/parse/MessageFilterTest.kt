@@ -33,6 +33,20 @@ class MessageFilterTest {
     }
 
     @Test
+    fun deductedWordingIsATransaction() {
+        val body = "Amt Deducted! Rs.10000 from your HDFC Bank A/c XX9924 for NEFT txn via HDFC Bank Online Banking Not you?Call 18002586161/SMS BLOCK OB to 7308080808"
+        assertNull(MessageFilter.rejectReason(body))
+        val out = SmsParser.parse("VM-HDFCBK-S", body, 0L) as SmsOutcome.Parsed
+        assertEquals(1_000_000L, out.txn.amountPaise)
+        assertEquals(Direction.DEBIT, out.txn.direction)
+        assertEquals("9924", out.txn.accountTail)
+        assertEquals("NEFT transfer", out.txn.note)
+        // UNVERIFIED FORMAT variant: same wording for IMPS.
+        val imps = SmsParser.parse("VM-HDFCBK-S", body.replace("NEFT", "IMPS"), 0L) as SmsOutcome.Parsed
+        assertEquals("IMPS transfer", imps.txn.note)
+    }
+
+    @Test
     fun unknownSenderIgnoredKnownUnparsedReported() {
         assertEquals(SmsOutcome.NotBankSender, SmsParser.parse("VM-AMAZON", "Rs.500 debited", 0L))
         val out = SmsParser.parse("JK-CUBANK-S", "Rs.500 debited from your card ending 1234 at SHOP", 0L)

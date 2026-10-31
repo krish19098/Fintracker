@@ -310,4 +310,29 @@ class RepositoryTest {
         assertEquals(0, s.needsReview)
         assertEquals(0, s.uncategorised)
     }
+    private val neftDebit = "Amt Deducted!\nRs.10000 from your HDFC Bank A/c XX9924 for NEFT txn via HDFC Bank Online Banking Not you?Call 18002586161/SMS BLOCK OB to 7308080808"
+    private val neftAt = TestData.at(LocalDate.of(2026, 10, 30), 10, 0)
+
+    @Test
+    fun neftDebitCountsAsSpendingAndNeedsACategory() = runBlocking {
+        val r = sms("VM-HDFCBK-S", neftDebit, neftAt)
+        assertTrue(r is IngestResult.Saved)
+        val t = all().single()
+        assertEquals(1_000_000L, t.amountPaise)
+        assertEquals(neftAt, t.timestamp)
+        assertTrue(t.needsReview)
+        assertNull(t.excludedReason)
+        assertEquals(1_000_000L, Totals.spend(all()))
+    }
+
+    @Test
+    fun neftToOwnAccountIsASelfTransferNotSpending() = runBlocking {
+        sms("VM-HDFCBK-S", neftDebit, neftAt)
+        sms("JK-CUBANK-S", "A/c XXXXXXXX6578 credited with INR 10,000.00 towards NEFT CR/HDFC0000001/SELF on 30-OCT-2026.Avl Bal 14006.73", neftAt + 3 * 60_000)
+        val rows = all()
+        assertEquals(2, rows.size)
+        assertTrue(rows.all { it.excludedReason == ExcludedReason.SELF_TRANSFER })
+        assertEquals(0L, Totals.spend(rows))
+        assertEquals(0L, Totals.income(rows))
+    }
 }

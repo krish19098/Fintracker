@@ -25,7 +25,7 @@ object MessageFilter {
         RegexOption.IGNORE_CASE,
     )
     private val verb = Regex(
-        """\b(?:debited|credited|sent|received|spent|paid|withdrawn|transferred|debit|credit)\b""",
+        """\b(?:debited|credited|deducted|deposited|sent|received|spent|paid|withdrawn|transferred|debit|credit)\b""",
         RegexOption.IGNORE_CASE,
     )
     private val amount = Regex(ParseUtils.AMT, RegexOption.IGNORE_CASE)

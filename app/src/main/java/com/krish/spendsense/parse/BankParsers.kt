@@ -27,6 +27,7 @@ private fun SmsInput.txn(
     app: TxnApp = if (ref != null) TxnApp.OTHER_UPI else TxnApp.NON_UPI,
     counterpartyTail: String? = null,
     incomeHint: IncomeKind? = null,
+    note: String? = null,
 ): ParsedTxn? {
     val paise = ParseUtils.parseAmountPaise(amount)?.takeIf { it > 0 } ?: return null
     val parsedDate = date?.let { ParseUtils.parseDate(it) ?: return null }
@@ -49,6 +50,7 @@ private fun SmsInput.txn(
         counterpartyTail = counterpartyTail?.uppercase(),
         upiType = upiType?.let { UpiType.valueOf(it.uppercase()) },
         incomeHint = incomeHint,
+        note = note,
     )
 }
 
@@ -106,6 +108,12 @@ object HdfcParser : BankParser("HDFC") {
         Template("""Sent\s+$AMT\s+From\s+HDFC\s+Bank\s+A/C\s*[*X]*(\d{2,4})\s+To\s+(.+?)\s+On\s+$DATE\s+Ref\s+(\d{12})""") { m ->
             val (amt, tail, to, date, ref) = m.destructured
             txn(amt, Direction.DEBIT, tail, date, ref = ref, counterparty = to)
+        },
+        // Verified (NEFT): "Amt Deducted! Rs.<amt> from your HDFC Bank A/c XX<last4> for NEFT txn via HDFC Bank Online Banking".
+        // No date or payee: the received time is used and the row goes to Review for a category. IMPS/RTGS: UNVERIFIED FORMAT.
+        Template("""Amt\s+Deducted!?\s*$AMT\s+from\s+your\s+HDFC\s+Bank\s+A/\s*c\s*[*X]*(\d{2,4})\s+for\s+(NEFT|IMPS|RTGS)\b""") { m ->
+            val (amt, tail, mode) = m.destructured
+            txn(amt, Direction.DEBIT, tail, null, note = "${mode.uppercase()} transfer")
         },
         // UNVERIFIED FORMAT: Received Rs.<amt> / In HDFC Bank A/C *<last4> / From <name> / On <date> / Ref <rrn>
         Template("""Received\s+$AMT\s+In\s+HDFC\s+Bank\s+A/C\s*[*X]*(\d{2,4})\s+From\s+(.+?)\s+On\s+$DATE\s+Ref\s+(\d{12})""") { m ->
