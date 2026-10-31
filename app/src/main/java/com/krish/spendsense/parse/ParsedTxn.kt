@@ -41,6 +41,8 @@ data class ParsedTxn(
     val counterpartyTail: String? = null,
     val upiType: UpiType? = null,
     val incomeHint: IncomeKind? = null,
+    /** Read by the general fallback reader, not a verified bank format: saved but flagged for review. */
+    val needsReview: Boolean = false,
 ) {
     /** Only a numeric counterparty tail can be one of the user's own accounts. */
     val counterpartyIsAccount: Boolean get() = counterpartyTail?.all { it.isDigit() } == true

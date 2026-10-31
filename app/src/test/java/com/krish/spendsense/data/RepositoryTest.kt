@@ -335,4 +335,14 @@ class RepositoryTest {
         assertEquals(0L, Totals.spend(rows))
         assertEquals(0L, Totals.income(rows))
     }
+    @Test
+    fun generalReaderRowIsCountedButAlwaysNeedsReview() = runBlocking {
+        val body = "Rs.320 debited from A/c XX4455 to VPA swiggy@icici on 30-10-26. Avl Bal Rs.1,000"
+        val r = sms("VM-HDFCBK-S", body, neftAt)
+        assertTrue(r is IngestResult.Saved)
+        val t = all().single()
+        assertEquals(db.categoryDao().bySystemKey(CatKeys.FOOD)!!.id, t.categoryId) // keyword rule still applies
+        assertTrue(t.needsReview) // but a general read is never trusted silently
+        assertEquals(32_000L, Totals.spend(all()))
+    }
 }

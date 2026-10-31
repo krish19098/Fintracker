@@ -49,7 +49,8 @@ class MessageFilterTest {
     @Test
     fun unknownSenderIgnoredKnownUnparsedReported() {
         assertEquals(SmsOutcome.NotBankSender, SmsParser.parse("VM-AMAZON", "Rs.500 debited", 0L))
-        val out = SmsParser.parse("JK-CUBANK-S", "Rs.500 debited from your card ending 1234 at SHOP", 0L)
+        // No account ending: neither a template nor the general reader can place it.
+        val out = SmsParser.parse("JK-CUBANK-S", "Rs.500 debited at SHOP", 0L)
         assertEquals(SmsOutcome.Unparsed("CUB", "CUBANK"), out)
     }
 

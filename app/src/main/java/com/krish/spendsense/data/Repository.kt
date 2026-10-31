@@ -149,6 +149,7 @@ class Repository(
         }
 
         val classified = classify(incoming, p.incomeHint, s)
+            .let { if (p.needsReview && it.excludedReason == null) it.copy(needsReview = true) else it }
         val inserted = classified.copy(id = txns.insert(classified))
         val saved = refTwin?.let { pairRefTwins(inserted, it) } ?: link(inserted)
         IngestResult.Saved(saved, inserted = true, newAccount = newAccount, simMoved = simMoved)

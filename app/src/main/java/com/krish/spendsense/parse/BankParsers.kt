@@ -160,6 +160,71 @@ object CubParser : BankParser("CUB") {
     )
 }
 
+/**
+ * Last-resort reader for bank SMS that no template matched, from any bank. It needs an amount, one clear
+ * direction word and an account ending; reminders, requests and failed transactions are refused. Everything
+ * it reads is flagged [ParsedTxn.needsReview]. Returns null to leave the message for the Review inbox.
+ */
+internal object GeneralSmsReader {
+    private val direction = Regex(
+        """\b(debited|deducted|withdrawn|spent|sent|paid|credited|received|deposited)\b""",
+        RegexOption.IGNORE_CASE,
+    )
+    private val notDone = Regex(
+        """\b(?:will\s+be|to\s+be|shall\s+be|is\s+due|are\s+due|due\s+(?:on|by|date)|min(?:imum)?\.?\s+(?:amt|amount)|""" +
+            """has\s+requested|requested\s+(?:you|money|Rs|INR|₹)|collect\s+request|payment\s+request|scheduled|upcoming|""" +
+            """failed|declined|unsuccessful|could\s+not|insufficient)\b""",
+        RegexOption.IGNORE_CASE,
+    )
+    private val amount = Regex(AMT, RegexOption.IGNORE_CASE)
+    private val balanceBefore = Regex("""(?:bal(?:ance)?|limit)\W{0,3}(?:is\W{0,3})?$""", RegexOption.IGNORE_CASE)
+    private val account = Regex(
+        """\b(?:a/\s*c|acct|account|ac|card|savings\s+no)\.?\s*(?:no\.?|number)?\s*(?:ending(?:\s+with)?|xx|\*)?\s*[:\-]?\s*[X*]*(\d{2,})\b""",
+        RegexOption.IGNORE_CASE,
+    )
+    private val balance = Regex(
+        """(?:Avl\.?|Available|Avail\.?)?\s*\bBal(?:ance)?\.?\s*(?:is|:)?\s*(?:Rs\.?|INR|₹)?\s*([\d,]+(?:\.\d{1,2})?)""",
+        RegexOption.IGNORE_CASE,
+    )
+    private val upiRef = Regex("""(?:UPI|Ref|RRN|UTR)\D{0,15}(\d{12})(?!\d)""", RegexOption.IGNORE_CASE)
+    private val mode = Regex("""\b(NEFT|IMPS|RTGS|UPI|ATM|NACH|ECS|POS)\b""", RegexOption.IGNORE_CASE)
+    private val date = Regex("(?<!\\d)$DATE(?!\\d)")
+    private val time = Regex(TIME)
+    private val vpa = Regex("""\b(?:VPA|to|from|by)\s*:?\s*($VPA)""", RegexOption.IGNORE_CASE)
+
+    fun read(input: SmsInput): ParsedTxn? = with(input) {
+        if (notDone.containsMatchIn(body)) return null
+        val verb = direction.find(body) ?: return null
+        val dir = when (verb.value.lowercase()) {
+            "credited", "received", "deposited" -> Direction.CREDIT
+            else -> Direction.DEBIT
+        }
+        // First amount that is not a balance or limit.
+        val amt = amount.findAll(body).firstOrNull { !balanceBefore.containsMatchIn(body.substring(0, it.range.first)) } ?: return null
+        val tail = account.find(body)?.groupValues?.get(1)?.takeLast(4) ?: return null
+        val kind = mode.find(body)?.value?.uppercase()
+        val ref = upiRef.find(body)?.groupValues?.get(1)
+        // A date later than the day the SMS arrived is not this transaction's date.
+        val received = ParseUtils.istDate(receivedAt)
+        val parsedDate = date.findAll(body).map { it.value }.firstOrNull { d -> ParseUtils.parseDate(d)?.let { !it.isAfter(received) } == true }
+        txn(
+            amt.groupValues[1], dir, tail, parsedDate,
+            time = parsedDate?.let { time.find(body)?.value },
+            ref = ref,
+            app = if (kind == "UPI" || (kind == null && ref != null)) TxnApp.OTHER_UPI else TxnApp.NON_UPI,
+            counterparty = vpa.find(body)?.groupValues?.get(1),
+            balance = balance.find(body)?.groupValues?.get(1)?.takeIf { it.any(Char::isDigit) },
+            incomeHint = if (dir == Direction.CREDIT) incomeHintFor(body) else null,
+            note = when (kind) {
+                null -> "Bank SMS"
+                "ATM" -> "ATM withdrawal"
+                "POS" -> "Card payment"
+                else -> "$kind transfer"
+            },
+        )?.copy(needsReview = true)
+    }
+}
+
 /** Bank added by the user in Settings with no dedicated parser: shared templates only. */
 class GenericBankParser(bank: String) : BankParser(bank) {
     override val ownTemplates: List<Template> = emptyList()
@@ -191,7 +256,9 @@ object SmsParser {
         val key = MessageFilter.senderKey(sender)
         val bank = senderKeys[key] ?: return SmsOutcome.NotBankSender
         MessageFilter.rejectReason(body)?.let { return SmsOutcome.Filtered(it) }
-        val txn = parserFor(bank).parse(body, receivedAt, simSlot) ?: return SmsOutcome.Unparsed(bank, key)
+        val txn = parserFor(bank).parse(body, receivedAt, simSlot)
+            ?: GeneralSmsReader.read(SmsInput(bank, ParseUtils.normalize(body), receivedAt, simSlot))
+            ?: return SmsOutcome.Unparsed(bank, key)
         return SmsOutcome.Parsed(txn, key)
     }
 
